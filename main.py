@@ -20,7 +20,7 @@ def run_web():
 # ====== تنظیمات تلگرام ======
 API_ID = 17349
 API_HASH = "344583e45741c457fe1862106095a5eb"
-TARGET_GROUP = -1004408912158
+TARGET_GROUP = -1004290700072
 group_entity = None
 
 client = TelegramClient('amir_session', API_ID, API_HASH)
