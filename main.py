@@ -245,6 +245,11 @@ async def main():
         collect_points_loop(),
         fishing_loop()
     )
+def keep_alive():
+    """یه حلقه ساده برای بیدار نگه داشتن Render"""
+    import time
+    while True:
+        time.sleep(300)  # هر ۵ دقیقه یه بار تیک میزنه
 
 if __name__ == "__main__":
     threading.Thread(target=run_web).start()
