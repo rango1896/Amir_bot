@@ -155,7 +155,20 @@ class AccountManager:
             except Exception:
                 logger.exception(f"[{client.account_id}] Queue worker failure")
 
+# === Keep Render awake with a web server ===
+from flask import Flask
+import threading
 
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "OK"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
+
+threading.Thread(target=run_flask, daemon=True).start()
 if __name__ == '__main__':
     async def main():
         manager = AccountManager("accounts.json")
