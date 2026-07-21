@@ -1,13 +1,13 @@
 import asyncio
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from telethon import TelegramClient, events
 from telethon.tl.functions.account import UpdateProfileRequest
 from deep_translator import GoogleTranslator
 from flask import Flask
 import threading
 
-# ====== وب‌سرور برای بیدار موندن ======
 app = Flask(__name__)
 
 @app.route('/')
@@ -17,13 +17,12 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=8080)
 
-# ====== تنظیمات تلگرام ======
 API_ID = 17349
 API_HASH = "344583e45741c457fe1862106095a5eb"
 TARGET_GROUP = -1004290700072
 group_entity = None
 
-client = TelegramClient('amir_session', API_ID, API_HASH)
+client = TelegramClient('sessions/amir_session', API_ID, API_HASH)
 
 collect_points_active = False
 fishing_active = False
@@ -165,16 +164,18 @@ async def fishing_loop():
         if fishing_active:
             await do_fishing()
 
+TEHRAN_TZ = ZoneInfo("Asia/Tehran")
+
 async def update_name_clock():
     while True:
         try:
             me = await client.get_me()
             base_name = strip_clock(me.first_name or "")
-            now = datetime.now().strftime("%H:%M")
+            now = datetime.now(TEHRAN_TZ).strftime("%H:%M")
             clock_str = to_double_struck(now)
             new_name = f"{base_name} {clock_str}" if base_name else clock_str
             await client(UpdateProfileRequest(first_name=new_name))
-            print(f"🕒 اسم به‌روز شد: {new_name}")
+            print(f"🕒 اسم به‌روز شد (تهران): {new_name}")
         except Exception as e:
             print(f"❌ خطا: {type(e).__name__}: {e}")
         await asyncio.sleep(60)
@@ -245,13 +246,14 @@ async def main():
         collect_points_loop(),
         fishing_loop()
     )
+
 def keep_alive():
-    """یه حلقه ساده برای بیدار نگه داشتن Render"""
     import time
     while True:
-        time.sleep(60)  # هر ۵ دقیقه یه بار تیک میزنه
+        time.sleep(60)
 
 if __name__ == "__main__":
     threading.Thread(target=run_web).start()
+    threading.Thread(target=keep_alive, daemon=True).start()
     with client:
         client.loop.run_until_complete(main())
