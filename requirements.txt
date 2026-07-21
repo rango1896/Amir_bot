@@ -1,3 +1,4 @@
 telethon
 deep-translator
 flask
+python-socks
