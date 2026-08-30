@@ -29,6 +29,14 @@ fishing_active = False
 stray_cat_active = True
 factory_active = False
 
+# متغیرهای سیستم ضد حذف
+anti_delete_active = False
+anti_delete_targets = {} # {chat_id: "Name"}
+message_cache = {} # کش کردن پیام‌ها برای تشخیص متن پاک شده
+
+# متغیرهای سیستم زمان‌بندی
+scheduled_messages = [] # [{'chat_id': 123, 'time': '14:30', 'text': 'سلام'}]
+
 # تابع تبدیل اعداد فارسی به انگلیسی
 def fa_to_en_digits(text):
     persian_digits = '۰۱۲۳۴۵۶۷۸۹'
@@ -56,83 +64,222 @@ def strip_clock(name):
             return parts[0]
     return name
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^ترجمه کن$'))
-async def translate_reply(event):
-    if not event.message.is_reply:
-        await event.reply("❗ لطفاً روی یه پیام ریپلای بزن و بعد دستور رو بفرست.")
-        return
-    replied_msg = await event.message.get_reply_message()
-    if not replied_msg or not replied_msg.text:
-        await event.reply("❗ پیام ریپلای شده متن نداره.")
-        return
-    original_text = replied_msg.text
-    try:
-        translated = GoogleTranslator(source='auto', target='fa').translate(original_text)
-        await event.reply(f"🔸 ترجمه:\n{translated}")
-    except Exception as e:
-        await event.reply(f"❌ خطا: {type(e).__name__}: {e}")
-
 # ================= سیستم هلپ =================
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هلپ$'))
 async def help_handler(event):
     help_text = (
         "📖 **راهنمای دستورات سلف‌بات:**\n\n"
         "🔹 **ترجمه کن**\n(با ریپلای روی یک پیام) متن را به فارسی ترجمه می‌کند.\n\n"
-        "🔹 **اسپم 1 [تعداد] [متن]**\nمثال: `اسپم 1 10 سلام` یا `اسپم ۱ ۱۰ سلام`\nتعداد مشخص شده پیام جداگانه حاوی متن را می‌فرستد. (اگه ریپلای کنی، پیام‌ها ریپلای میشن)\n\n"
-        "🔹 **اسپم 2 [تعداد] [متن]**\nمثال: `اسپم 2 10 سلام` یا `اسپم ۲ ۱۰ سلام`\nیک پیام می‌فرستد که در آن متن به تعداد مشخص شده تکرار شده است.\n\n"
-        "🔹 **پوینت روشن / پوینت خاموش**\nجمع‌آوری خودکار پوینت بازی را روشن یا خاموش می‌کند.\n\n"
-        "🔹 **ماهی روشن / ماهی خاموش**\nسیستم ماهیگیری خودکار را روشن یا خاموش می‌کند.\n\n"
-        "🔹 **کارخونه میویی روشن / کارخونه میویی خاموش**\nچرخه کامل تولید و فروش کارخونه را مدیریت می‌کند (هر ۲۴ ساعت).\n\n"
+        "🔹 **اسپم [مدل] [تعداد] [ثانیه تاخیر] [متن]**\nمثال: `اسپم 1 10 5 سلام` (۵ ثانیه فاصله)\nاگر ثانیه را ننویسید همون ۰.۵ ثانیه پیش‌فرض کار میکنه.\nمدل ۱: پیام جداگانه / مدل ۲: همه در یک پیام.\n\n"
+        "🔹 **پاکسازی [تعداد]**\nمثال: `پاکسازی 50`\nتعداد مشخص شده از آخرین پیام‌های **خودتان** را در چت برای همه پاک می‌کند.\n\n"
+        "🔹 **ضد حذف روشن / ضد حذف خاموش**\nسیستم ضبط پیام‌های پاک شده را روشن/خاموش می‌کند.\n\n"
+        "🔹 **اد حذف [آیدی یا عدد]**\nمثال: `اد حذف @F35_JK` یا `اد حذف -100123456`\nشخص یا گپ را به لیست ضد حذف اضافه می‌کند.\n\n"
+        "🔹 **لیست اد حذف**\nافراد و گپ‌های موجود در لیست ضد حذف را نشان می‌دهد.\n\n"
+        "🔹 **زمان [آیدی] [ساعت] [متن]** یا **زمان [ساعت] [متن]**\nمثال: `زمان 14:30 رسیدم` یا `زمان @user 14:30 سلام`\nپیام را در زمان مشخص شده ارسال می‌کند.\n\n"
+        "🔹 **لیست زمان**\nپیام‌های زمان‌بندی شده فعال را نشان می‌دهد.\n\n"
+        "🔹 **پوینت روشن / پوینت خاموش**\nجمع‌آوری خودکار پوینت بازی را مدیریت می‌کند.\n\n"
+        "🔹 **ماهی روشن / ماهی خاموش**\nسیستم ماهیگیری خودکار (هر ۳۰ دقیقه).\n\n"
+        "🔹 **کارخونه میویی روشن / کارخونه میویی خاموش**\nچرخه کامل تولید و فروش کارخونه (هر ۲۴.۵ ساعت).\n\n"
         "🔹 **هلپ**\nهمین پیام راهنما را نمایش می‌دهد."
     )
     await event.reply(help_text)
 # ==============================================
 
 # ================= سیستم اسپم =================
-async def run_spam(model, count, text, chat_id, reply_to=None):
+async def run_spam(model, count, text, chat_id, reply_to=None, delay=0.5):
     try:
         if model == 1:
             for i in range(count):
                 await client.send_message(chat_id, text, reply_to=reply_to)
-                await asyncio.sleep(0.5) # تاخیر نیم ثانیه‌ای برای جلوگیری از بن
+                await asyncio.sleep(delay)
         elif model == 2:
             full_text = (text + " ") * count
             if len(full_text) > 4096:
                 full_text = full_text[:4090] + "..."
-                print("⚠️ متن خیلی طولانی بود، کوتاه شد تا تلگرام ارور نده.")
+            await asyncio.sleep(delay) # تاخیر برای مدل 2 هم اعمال شود
             await client.send_message(chat_id, full_text, reply_to=reply_to)
     except Exception as e:
         print(f"❌ خطا در اسپم: {type(e).__name__}: {e}")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^اسپم ([12۱۲]) ([\d۰-۹]+) (.+)$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^اسپم ([12۱۲]) ([\d۰-۹]+)(?:\s+([\d۰-۹]+))?\s+(.+)$'))
 async def spam_handler(event):
-    # تبدیل اعداد فارسی به انگلیسی
     model_str = fa_to_en_digits(event.pattern_match.group(1))
     count_str = fa_to_en_digits(event.pattern_match.group(2))
+    delay_str = event.pattern_match.group(3)
+    text = event.pattern_match.group(4)
     
     model = int(model_str)
     count = int(count_str)
-    text = event.pattern_match.group(3)
+    delay = float(fa_to_en_digits(delay_str)) if delay_str else 0.5
     chat_id = event.chat_id
     
     if count > 1000:
-        await event.reply("❗ برای جلوگیری از بن، حداکثر تعداد ۱۰۰۰ تعیین شده.")
+        await event.reply("❗ حداکثر تعداد ۱۰۰۰ تعیین شده.")
         return
 
-    # بررسی اینکه آیا کاربر روی پیامی ریپلای کرده یا نه
     reply_to_id = None
     if event.message.is_reply:
         replied_msg = await event.message.get_reply_message()
         if replied_msg:
             reply_to_id = replied_msg.id
 
-    # فرستادن پیام تایید، پاک کردن دستور کاربر و پاک کردن پیام تایید
-    reply_msg = await event.reply(f"🚀 شروع اسپم مدل {model} ({count} بار)...")
+    reply_msg = await event.reply(f"🚀 شروع اسپم مدل {model} ({count} بار با تاخیر {delay}ث)...")
     await event.delete()
     await reply_msg.delete()
 
-    # اجرای اسپم در پس‌زمینه
-    asyncio.create_task(run_spam(model, count, text, chat_id, reply_to_id))
+    asyncio.create_task(run_spam(model, count, text, chat_id, reply_to_id, delay))
+# ==============================================
+
+# ================= سیستم پاکسازی =================
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پاکسازی ([\d۰-۹]+)$'))
+async def clear_handler(event):
+    count = int(fa_to_en_digits(event.pattern_match.group(1)))
+    if count > 1000:
+        await event.reply("❗ حداکثر ۱۰۰۰ پیام در دفعات.")
+        return
+        
+    await event.delete() # پاک کردن دستور itself
+    deleted_count = 0
+    async for msg in client.iter_messages(event.chat_id, from_user='me', limit=count):
+        try:
+            await msg.delete(revoke=True) # پاک کردن برای همه
+            deleted_count += 1
+            await asyncio.sleep(0.1) # جلوگیری از محدودیت تلگرام
+        except:
+            pass
+    # ارسال و پاک کردن پیام تایید
+    confirm = await event.reply(f"🧹 {deleted_count} پیام پاک شد.")
+    await asyncio.sleep(3)
+    await confirm.delete()
+# ==============================================
+
+# ================= سیستم ضد حذف =================
+@client.on(events.NewMessage(outgoing=True, pattern=r'^ضد حذف (روشن|خاموش)$'))
+async def anti_delete_toggle(event):
+    global anti_delete_active
+    status = event.pattern_match.group(1)
+    if status == "روشن":
+        anti_delete_active = True
+        await event.reply("✅ سیستم ضد حذف **روشن** شد.")
+    else:
+        anti_delete_active = False
+        await event.reply("🛑 سیستم ضد حذف **خاموش** شد.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^اد حذف (.+)$'))
+async def add_anti_delete(event):
+    target_str = event.pattern_match.group(1)
+    try:
+        entity = await client.get_entity(target_str)
+        chat_id = entity.id
+        name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or target_str
+        anti_delete_targets[chat_id] = name
+        await event.reply(f"✅ `{name}` به لیست ضد حذف اضافه شد.")
+    except Exception as e:
+        await event.reply(f"❌ پیدا نشد. لطفا آیدی یا لینک درست بده.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^لیست اد حذف$'))
+async def list_anti_delete(event):
+    if not anti_delete_targets:
+        await event.reply("📋 لیست ضد حذف خالی است.")
+        return
+    text = "📋 **لیست ضد حذف:**\n\n"
+    for chat_id, name in anti_delete_targets.items():
+        text += f"▫️ {name} (`{chat_id}`)\n"
+    await event.reply(text)
+
+# ذخیره پیام‌ها برای ضد حذف
+@client.on(events.NewMessage())
+async def anti_delete_cacher(event):
+    if not anti_delete_active:
+        return
+    chat_id = event.chat_id
+    if chat_id in anti_delete_targets:
+        if chat_id not in message_cache:
+            message_cache[chat_id] = {}
+        message_cache[chat_id][event.id] = event.message
+        # نگه داشتن فقط ۵۰ پیام آخر
+        if len(message_cache[chat_id]) > 50:
+            first_key = next(iter(message_cache[chat_id]))
+            del message_cache[chat_id][first_key]
+
+# تشخیص پاک شدن پیام
+@client.on(events.MessageDeleted)
+async def anti_delete_handler(event):
+    if not anti_delete_active:
+        return
+    for msg_id in event.deleted_ids:
+        for chat_id, msgs in message_cache.items():
+            if msg_id in msgs:
+                msg = msgs[msg_id]
+                try:
+                    sender = await msg.get_sender()
+                    chat = await msg.get_chat()
+                    sender_name = getattr(sender, 'first_name', None) or getattr(sender, 'title', None) or "ناشناس"
+                    chat_name = getattr(chat, 'title', None) or "پیوی"
+                    text = msg.text or "[پیام متنی نیست (عکس/ویدیو/استیکر...)]"
+                    
+                    report = f"🗑 **پیام حذف شد**\n\n👤 فرستنده: {sender_name}\n💬 چت: {chat_name}\n\n📝 متن:\n{text}"
+                    await client.send_message('me', report)
+                except Exception as e:
+                    print(f"خطا در ارسال پیام حذف شده: {e}")
+                del msgs[msg_id]
+                break
+# ==============================================
+
+# ================= سیستم زمان‌بندی =================
+@client.on(events.NewMessage(outgoing=True, pattern=r'^زمان (.+)$'))
+async def schedule_message(event):
+    parts = event.pattern_match.group(1).split()
+    target = None
+    time_str = None
+    text = None
+    
+    if len(parts) >= 3 and re.match(r'^\d{1,2}:\d{2}$', parts[1]): # زمان آیدی ساعت متن
+        target = parts[0]
+        time_str = parts[1]
+        text = " ".join(parts[2:])
+    elif len(parts) >= 2 and re.match(r'^\d{1,2}:\d{2}$', parts[0]): # زمان ساعت متن
+        time_str = parts[0]
+        text = " ".join(parts[1:])
+        
+    if not time_str or not text:
+        await event.reply("❗ فرمت اشتباه است.\nمثال: `زمان 14:30 سلام` یا `زمان @user 14:30 سلام`")
+        return
+        
+    chat_id = event.chat_id
+    if target:
+        try:
+            entity = await client.get_entity(target)
+            chat_id = entity.id
+        except:
+            await event.reply("❗ آیدی گیرنده پیدا نشد.")
+            return
+            
+    scheduled_messages.append({'chat_id': chat_id, 'time': time_str, 'text': text})
+    await event.reply(f"⏰ پیام برای ساعت `{time_str}` زمان‌بندی شد.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^لیست زمان$'))
+async def list_schedule(event):
+    if not scheduled_messages:
+        await event.reply("📋 هیچ پیام زمان‌بندی شده‌ای وجود ندارد.")
+        return
+    text = "📋 **لیست پیام‌های زمان‌بندی شده:**\n\n"
+    for i, job in enumerate(scheduled_messages, 1):
+        text += f"{i}. ⏰ `{job['time']}` -> `{job['text'][:20]}...`\n"
+    await event.reply(text)
+
+async def schedule_loop():
+    while True:
+        now = datetime.now(TEHRAN_TZ).strftime("%H:%M")
+        for job in scheduled_messages[:]:
+            if job['time'] == now:
+                try:
+                    await client.send_message(job['chat_id'], job['text'])
+                    scheduled_messages.remove(job)
+                    print(f"✅ پیام زمان‌بندی شده ساعت {now} ارسال شد.")
+                except Exception as e:
+                    print(f"❌ خطا در ارسال زمان‌بندی: {e}")
+        await asyncio.sleep(20) # چک کردن هر ۲۰ ثانیه
 # ==============================================
 
 POINTS_INTERVAL = 600
@@ -178,7 +325,7 @@ async def points_off(event):
     collect_points_active = False
     await event.reply("🛑 جمع‌آوری خودکار پوینت **خاموش** شد.")
 
-FISHING_INTERVAL = 3600
+FISHING_INTERVAL = 1800 # تغییر به ۳۰ دقیقه
 
 async def do_fishing():
     try:
@@ -365,9 +512,10 @@ async def factory_cycle():
             await asyncio.sleep(2)
             if not await click_factory_button(panel_id, "شروع تولید"): continue
             
-            print("⏳ تولید استارت خورد. سیستم ۲۴ ساعت صبر می‌کنه...")
+            print("⏳ تولید استارت خورد. سیستم ۲۴ ساعت و ۳۰ دقیقه صبر می‌کنه...")
             waited = 0
-            while waited < 86400 and factory_active:
+            # 86400 (24 ساعت) + 1800 (30 دقیقه) = 88200
+            while waited < 88200 and factory_active:
                 await asyncio.sleep(60)
                 waited += 60
             
@@ -430,7 +578,8 @@ async def main():
         meow_loop(),
         update_name_clock(),
         collect_points_loop(),
-        fishing_loop()
+        fishing_loop(),
+        schedule_loop()
     )
 
 def keep_alive():
