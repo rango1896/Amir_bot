@@ -2,7 +2,7 @@ import asyncio
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, utils
 from telethon.tl.functions.account import UpdateProfileRequest
 from deep_translator import GoogleTranslator
 from flask import Flask
@@ -73,7 +73,8 @@ async def help_handler(event):
         "🔹 **اسپم [مدل] [تعداد] [ثانیه تاخیر] [متن]**\nمثال: `اسپم 1 10 5 سلام` (۵ ثانیه فاصله)\nاگر ثانیه را ننویسید همون ۰.۵ ثانیه پیش‌فرض کار میکنه.\nمدل ۱: پیام جداگانه / مدل ۲: همه در یک پیام.\n\n"
         "🔹 **پاکسازی [تعداد]**\nمثال: `پاکسازی 50`\nتعداد مشخص شده از آخرین پیام‌های **خودتان** را در چت برای همه پاک می‌کند.\n\n"
         "🔹 **ضد حذف روشن / ضد حذف خاموش**\nسیستم ضبط پیام‌های پاک شده را روشن/خاموش می‌کند.\n\n"
-        "🔹 **اد حذف [آیدی یا عدد]**\nمثال: `اد حذف @F35_JK` یا `اد حذف 123456789`\nشخص یا گپ را به لیست ضد حذف اضافه می‌کند (عکس، استیکر، گیف و متن رو هم میفرسته).\n\n"
+        "🔹 **اد حذف [آیدی/عدد/چند آیدی]** یا **اد حذف** (با ریپلای)\nمثال: `اد حذف @F35_JK 123456`\nشخص یا گپ را به لیست ضد حذف اضافه می‌کند.\n\n"
+        "🔹 **حذف اد [آیدی/عدد]** یا **حذف اد** (با ریپلای)\nشخص را از لیست ضد حذف حذف می‌کند.\n\n"
         "🔹 **لیست اد حذف**\nافراد و گپ‌های موجود در لیست ضد حذف را نشان می‌دهد.\n\n"
         "🔹 **زمان [آیدی] [ساعت] [متن]** یا **زمان [ساعت] [متن]**\nمثال: `زمان 14:30 رسیدم` یا `زمان @user 14:30 سلام`\nپیام را در زمان مشخص شده ارسال می‌کند.\n\n"
         "🔹 **لیست زمان**\nپیام‌های زمان‌بندی شده فعال را نشان می‌دهد.\n\n"
@@ -96,7 +97,7 @@ async def run_spam(model, count, text, chat_id, reply_to=None, delay=0.5):
             full_text = (text + " ") * count
             if len(full_text) > 4096:
                 full_text = full_text[:4090] + "..."
-            await asyncio.sleep(delay) # تاخیر برای مدل 2 هم اعمال شود
+            await asyncio.sleep(delay)
             await client.send_message(chat_id, full_text, reply_to=reply_to)
     except Exception as e:
         print(f"❌ خطا در اسپم: {type(e).__name__}: {e}")
@@ -138,16 +139,15 @@ async def clear_handler(event):
         await event.reply("❗ حداکثر ۱۰۰۰ پیام در دفعات.")
         return
         
-    await event.delete() # پاک کردن دستور itself
+    await event.delete()
     deleted_count = 0
     async for msg in client.iter_messages(event.chat_id, from_user='me', limit=count):
         try:
-            await msg.delete(revoke=True) # پاک کردن برای همه
+            await msg.delete(revoke=True)
             deleted_count += 1
-            await asyncio.sleep(0.1) # جلوگیری از محدودیت تلگرام
+            await asyncio.sleep(0.1)
         except:
             pass
-    # ارسال و پاک کردن پیام تایید
     confirm = await event.reply(f"🧹 {deleted_count} پیام پاک شد.")
     await asyncio.sleep(3)
     await confirm.delete()
@@ -165,29 +165,77 @@ async def anti_delete_toggle(event):
         anti_delete_active = False
         await event.reply("🛑 سیستم ضد حذف **خاموش** شد.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^اد حذف (.+)$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^اد حذف(?: (اد شه|(.+)))?$'))
 async def add_anti_delete(event):
-    target_str = event.pattern_match.group(1).strip()
-    try:
-        # اگه آیدی عددی بود، مستقیم ذخیره کن تا ارور نده
-        if target_str.lstrip('-').isdigit():
-            chat_id = int(target_str)
-            name = target_str
-            # سعی میکنیم اسمشو دربیاریم، اگه نتونستیم همون عدد میمونه
-            try:
-                entity = await client.get_entity(chat_id)
-                name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or target_str
-            except:
-                pass
-        else:
-            entity = await client.get_entity(target_str)
-            chat_id = entity.id
-            name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or target_str
-            
-        anti_delete_targets[chat_id] = name
-        await event.reply(f"✅ `{name}` به لیست ضد حذف اضافه شد.")
-    except Exception as e:
-        await event.reply(f"❌ پیدا نشد. لطفا آیدی یا لینک درست بده.")
+    targets_str = []
+    # حالت ریپلای
+    if event.message.is_reply and (not event.pattern_match.group(2) or event.pattern_match.group(1) == 'اد شه'):
+        replied_msg = await event.get_reply_message()
+        if replied_msg and replied_msg.sender_id:
+            targets_str.append(str(replied_msg.sender_id))
+    # حالت متن دستی (چند آیدی با فاصله)
+    elif event.pattern_match.group(2):
+        targets_str.extend(event.pattern_match.group(2).split())
+    else:
+        await event.reply("❗ فرمت اشتباه است. روی پیام ریپلای کنید یا آیدی بده.")
+        return
+
+    added_list = []
+    for target in targets_str:
+        try:
+            if target.lstrip('-').isdigit():
+                pid = int(target)
+                name = target
+                try:
+                    ent = await client.get_entity(pid)
+                    name = getattr(ent, 'first_name', None) or getattr(ent, 'title', None) or target
+                except:
+                    pass
+            else:
+                ent = await client.get_entity(target)
+                pid = utils.get_peer_id(ent)
+                name = getattr(ent, 'first_name', None) or getattr(ent, 'title', None) or target
+                
+            anti_delete_targets[pid] = name
+            added_list.append(f"{name} (`{pid}`)")
+        except Exception as e:
+            await event.reply(f"❌ `{target}` پیدا نشد.")
+
+    if added_list:
+        await event.reply(f"✅ اضافه شدند:\n" + "\n".join(added_list))
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد(?: (.+))?$'))
+async def remove_anti_delete(event):
+    targets_str = []
+    if event.message.is_reply and not event.pattern_match.group(1):
+        replied_msg = await event.get_reply_message()
+        if replied_msg and replied_msg.sender_id:
+            targets_str.append(str(replied_msg.sender_id))
+    elif event.pattern_match.group(1):
+        targets_str.extend(event.pattern_match.group(1).split())
+    else:
+        await event.reply("❗ فرمت اشتباه است. روی پیام ریپلای کنید یا آیدی بده.")
+        return
+
+    removed_list = []
+    for target in targets_str:
+        try:
+            if target.lstrip('-').isdigit():
+                pid = int(target)
+            else:
+                ent = await client.get_entity(target)
+                pid = utils.get_peer_id(ent)
+                
+            if pid in anti_delete_targets:
+                removed_list.append(anti_delete_targets[pid])
+                del anti_delete_targets[pid]
+        except:
+            pass
+
+    if removed_list:
+        await event.reply(f"❌ حذف شدند:\n" + ", ".join(removed_list))
+    else:
+        await event.reply("کسی برای حذف پیدا نشد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^لیست اد حذف$'))
 async def list_anti_delete(event):
@@ -199,22 +247,23 @@ async def list_anti_delete(event):
         text += f"▫️ {name} (`{chat_id}`)\n"
     await event.reply(text)
 
-# ذخیره پیام‌ها برای ضد حذف
+# ذخیره پیام‌ها برای ضد حذف (بررسی هم گپ هم فرستنده)
 @client.on(events.NewMessage())
 async def anti_delete_cacher(event):
     if not anti_delete_active:
         return
     chat_id = event.chat_id
-    if chat_id in anti_delete_targets:
+    sender_id = event.sender_id
+    # اگه گپ تو لیست بود یا فرستنده تو لیست بود
+    if chat_id in anti_delete_targets or sender_id in anti_delete_targets:
         if chat_id not in message_cache:
             message_cache[chat_id] = {}
         message_cache[chat_id][event.id] = event.message
-        # نگه داشتن فقط ۵۰ پیام آخر
-        if len(message_cache[chat_id]) > 50:
+        if len(message_cache[chat_id]) > 100:
             first_key = next(iter(message_cache[chat_id]))
             del message_cache[chat_id][first_key]
 
-# تشخیص پاک شدن پیام و ارسال مدیا
+# تشخیص پاک شدن پیام و ارسال مدیا با مشخصات کامل
 @client.on(events.MessageDeleted)
 async def anti_delete_handler(event):
     if not anti_delete_active:
@@ -226,20 +275,40 @@ async def anti_delete_handler(event):
                 try:
                     sender = await msg.get_sender()
                     chat = await msg.get_chat()
-                    sender_name = getattr(sender, 'first_name', None) or getattr(sender, 'title', None) or "ناشناس"
-                    chat_name = getattr(chat, 'title', None) or "پیوی"
                     
-                    report = f"🗑 **پیام حذف شد**\n\n👤 فرستنده: {sender_name}\n💬 چت: {chat_name}"
+                    sender_name = getattr(sender, 'first_name', None) or getattr(sender, 'title', None) or "ناشناس"
+                    sender_id = sender.id
+                    sender_username = f"@{sender.username}" if sender.username else "ندارد"
+                    
+                    chat_name = getattr(chat, 'title', None) or "پیوی"
+                    chat_id_val = chat_id
+                    chat_username = f"@{chat.username}" if hasattr(chat, 'username') and chat.username else "ندارد"
+                    
+                    sent_time = msg.date.astimezone(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                    del_time = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    report = (
+                        f"🗑 **پیام حذف شد**\n\n"
+                        f"👤 **فرستنده:** {sender_name}\n"
+                        f"🆔 **آیدی عددی:** `{sender_id}`\n"
+                        f"📛 **آیدی کاربر:** {sender_username}\n\n"
+                        f"💬 **چت:** {chat_name}\n"
+                        f"🆔 **آیدی چت:** `{chat_id_val}`\n"
+                        f"🔗 **لینک چت:** {chat_username}\n\n"
+                        f"⏱ **زمان ارسال:** {sent_time}\n"
+                        f"⏱ **زمان حذف:** {del_time}\n"
+                    )
                     
                     # اگه عکس/استیکر/گیف/ویدیو داشت
                     if msg.media and (msg.photo or msg.document):
                         try:
-                            await client.send_file('me', msg.media, caption=report)
+                            sent_msg = await client.send_file('me', msg.media)
+                            await sent_msg.reply(report)
                         except Exception as e:
-                            await client.send_message('me', f"{report}\n\n[مدیا قابل بارگذاری نبود]")
+                            await client.send_message('me', f"{report}\n[مدیا قابل بارگذاری نبود]")
                     # اگه فقط متن داشت
                     elif msg.text:
-                        await client.send_message('me', f"{report}\n\n📝 متن:\n{msg.text}")
+                        await client.send_message('me', f"{report}\n📝 **متن:**\n{msg.text}")
                     else:
                         await client.send_message('me', report)
                         
@@ -257,11 +326,11 @@ async def schedule_message(event):
     time_str = None
     text = None
     
-    if len(parts) >= 3 and re.match(r'^\d{1,2}:\d{2}$', parts[1]): # زمان آیدی ساعت متن
+    if len(parts) >= 3 and re.match(r'^\d{1,2}:\d{2}$', parts[1]):
         target = parts[0]
         time_str = parts[1]
         text = " ".join(parts[2:])
-    elif len(parts) >= 2 and re.match(r'^\d{1,2}:\d{2}$', parts[0]): # زمان ساعت متن
+    elif len(parts) >= 2 and re.match(r'^\d{1,2}:\d{2}$', parts[0]):
         time_str = parts[0]
         text = " ".join(parts[1:])
         
@@ -273,7 +342,7 @@ async def schedule_message(event):
     if target:
         try:
             entity = await client.get_entity(target)
-            chat_id = entity.id
+            chat_id = utils.get_peer_id(entity)
         except:
             await event.reply("❗ آیدی گیرنده پیدا نشد.")
             return
@@ -302,7 +371,7 @@ async def schedule_loop():
                     print(f"✅ پیام زمان‌بندی شده ساعت {now} ارسال شد.")
                 except Exception as e:
                     print(f"❌ خطا در ارسال زمان‌بندی: {e}")
-        await asyncio.sleep(20) # چک کردن هر ۲۰ ثانیه
+        await asyncio.sleep(20)
 # ==============================================
 
 POINTS_INTERVAL = 600
@@ -348,7 +417,7 @@ async def points_off(event):
     collect_points_active = False
     await event.reply("🛑 جمع‌آوری خودکار پوینت **خاموش** شد.")
 
-FISHING_INTERVAL = 1800 # تغییر به ۳۰ دقیقه
+FISHING_INTERVAL = 1800 # ۳۰ دقیقه
 
 async def do_fishing():
     try:
@@ -537,8 +606,7 @@ async def factory_cycle():
             
             print("⏳ تولید استارت خورد. سیستم ۲۴ ساعت و ۳۰ دقیقه صبر می‌کنه...")
             waited = 0
-            # 86400 (24 ساعت) + 1800 (30 دقیقه) = 88200
-            while waited < 88200 and factory_active:
+            while waited < 88200 and factory_active: # 24.5 ساعت
                 await asyncio.sleep(60)
                 waited += 60
             
