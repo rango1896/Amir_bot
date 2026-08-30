@@ -73,7 +73,7 @@ async def help_handler(event):
         "🔹 **اسپم [مدل] [تعداد] [ثانیه تاخیر] [متن]**\nمثال: `اسپم 1 10 5 سلام` (۵ ثانیه فاصله)\nاگر ثانیه را ننویسید همون ۰.۵ ثانیه پیش‌فرض کار میکنه.\nمدل ۱: پیام جداگانه / مدل ۲: همه در یک پیام.\n\n"
         "🔹 **پاکسازی [تعداد]**\nمثال: `پاکسازی 50`\nتعداد مشخص شده از آخرین پیام‌های **خودتان** را در چت برای همه پاک می‌کند.\n\n"
         "🔹 **ضد حذف روشن / ضد حذف خاموش**\nسیستم ضبط پیام‌های پاک شده را روشن/خاموش می‌کند.\n\n"
-        "🔹 **اد حذف [آیدی یا عدد]**\nمثال: `اد حذف @F35_JK` یا `اد حذف -100123456`\nشخص یا گپ را به لیست ضد حذف اضافه می‌کند.\n\n"
+        "🔹 **اد حذف [آیدی یا عدد]**\nمثال: `اد حذف @F35_JK` یا `اد حذف 123456789`\nشخص یا گپ را به لیست ضد حذف اضافه می‌کند (عکس، استیکر، گیف و متن رو هم میفرسته).\n\n"
         "🔹 **لیست اد حذف**\nافراد و گپ‌های موجود در لیست ضد حذف را نشان می‌دهد.\n\n"
         "🔹 **زمان [آیدی] [ساعت] [متن]** یا **زمان [ساعت] [متن]**\nمثال: `زمان 14:30 رسیدم` یا `زمان @user 14:30 سلام`\nپیام را در زمان مشخص شده ارسال می‌کند.\n\n"
         "🔹 **لیست زمان**\nپیام‌های زمان‌بندی شده فعال را نشان می‌دهد.\n\n"
@@ -167,11 +167,23 @@ async def anti_delete_toggle(event):
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد حذف (.+)$'))
 async def add_anti_delete(event):
-    target_str = event.pattern_match.group(1)
+    target_str = event.pattern_match.group(1).strip()
     try:
-        entity = await client.get_entity(target_str)
-        chat_id = entity.id
-        name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or target_str
+        # اگه آیدی عددی بود، مستقیم ذخیره کن تا ارور نده
+        if target_str.lstrip('-').isdigit():
+            chat_id = int(target_str)
+            name = target_str
+            # سعی میکنیم اسمشو دربیاریم، اگه نتونستیم همون عدد میمونه
+            try:
+                entity = await client.get_entity(chat_id)
+                name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or target_str
+            except:
+                pass
+        else:
+            entity = await client.get_entity(target_str)
+            chat_id = entity.id
+            name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or target_str
+            
         anti_delete_targets[chat_id] = name
         await event.reply(f"✅ `{name}` به لیست ضد حذف اضافه شد.")
     except Exception as e:
@@ -202,7 +214,7 @@ async def anti_delete_cacher(event):
             first_key = next(iter(message_cache[chat_id]))
             del message_cache[chat_id][first_key]
 
-# تشخیص پاک شدن پیام
+# تشخیص پاک شدن پیام و ارسال مدیا
 @client.on(events.MessageDeleted)
 async def anti_delete_handler(event):
     if not anti_delete_active:
@@ -216,10 +228,21 @@ async def anti_delete_handler(event):
                     chat = await msg.get_chat()
                     sender_name = getattr(sender, 'first_name', None) or getattr(sender, 'title', None) or "ناشناس"
                     chat_name = getattr(chat, 'title', None) or "پیوی"
-                    text = msg.text or "[پیام متنی نیست (عکس/ویدیو/استیکر...)]"
                     
-                    report = f"🗑 **پیام حذف شد**\n\n👤 فرستنده: {sender_name}\n💬 چت: {chat_name}\n\n📝 متن:\n{text}"
-                    await client.send_message('me', report)
+                    report = f"🗑 **پیام حذف شد**\n\n👤 فرستنده: {sender_name}\n💬 چت: {chat_name}"
+                    
+                    # اگه عکس/استیکر/گیف/ویدیو داشت
+                    if msg.media and (msg.photo or msg.document):
+                        try:
+                            await client.send_file('me', msg.media, caption=report)
+                        except Exception as e:
+                            await client.send_message('me', f"{report}\n\n[مدیا قابل بارگذاری نبود]")
+                    # اگه فقط متن داشت
+                    elif msg.text:
+                        await client.send_message('me', f"{report}\n\n📝 متن:\n{msg.text}")
+                    else:
+                        await client.send_message('me', report)
+                        
                 except Exception as e:
                     print(f"خطا در ارسال پیام حذف شده: {e}")
                 del msgs[msg_id]
