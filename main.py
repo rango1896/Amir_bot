@@ -27,6 +27,14 @@ client = TelegramClient('sessions/amir_session', API_ID, API_HASH)
 collect_points_active = False
 fishing_active = False
 stray_cat_active = True
+factory_active = False
+
+# تابع تبدیل اعداد فارسی به انگلیسی
+def fa_to_en_digits(text):
+    persian_digits = '۰۱۲۳۴۵۶۷۸۹'
+    english_digits = '0123456789'
+    translation_table = str.maketrans(persian_digits, english_digits)
+    return text.translate(translation_table)
 
 def to_double_struck(text):
     normal = "0123456789"
@@ -63,6 +71,69 @@ async def translate_reply(event):
         await event.reply(f"🔸 ترجمه:\n{translated}")
     except Exception as e:
         await event.reply(f"❌ خطا: {type(e).__name__}: {e}")
+
+# ================= سیستم هلپ =================
+@client.on(events.NewMessage(outgoing=True, pattern=r'^هلپ$'))
+async def help_handler(event):
+    help_text = (
+        "📖 **راهنمای دستورات سلف‌بات:**\n\n"
+        "🔹 **ترجمه کن**\n(با ریپلای روی یک پیام) متن را به فارسی ترجمه می‌کند.\n\n"
+        "🔹 **اسپم 1 [تعداد] [متن]**\nمثال: `اسپم 1 10 سلام` یا `اسپم ۱ ۱۰ سلام`\nتعداد مشخص شده پیام جداگانه حاوی متن را می‌فرستد. (اگه ریپلای کنی، پیام‌ها ریپلای میشن)\n\n"
+        "🔹 **اسپم 2 [تعداد] [متن]**\nمثال: `اسپم 2 10 سلام` یا `اسپم ۲ ۱۰ سلام`\nیک پیام می‌فرستد که در آن متن به تعداد مشخص شده تکرار شده است.\n\n"
+        "🔹 **پوینت روشن / پوینت خاموش**\nجمع‌آوری خودکار پوینت بازی را روشن یا خاموش می‌کند.\n\n"
+        "🔹 **ماهی روشن / ماهی خاموش**\nسیستم ماهیگیری خودکار را روشن یا خاموش می‌کند.\n\n"
+        "🔹 **کارخونه میویی روشن / کارخونه میویی خاموش**\nچرخه کامل تولید و فروش کارخونه را مدیریت می‌کند (هر ۲۴ ساعت).\n\n"
+        "🔹 **هلپ**\nهمین پیام راهنما را نمایش می‌دهد."
+    )
+    await event.reply(help_text)
+# ==============================================
+
+# ================= سیستم اسپم =================
+async def run_spam(model, count, text, chat_id, reply_to=None):
+    try:
+        if model == 1:
+            for i in range(count):
+                await client.send_message(chat_id, text, reply_to=reply_to)
+                await asyncio.sleep(0.5) # تاخیر نیم ثانیه‌ای برای جلوگیری از بن
+        elif model == 2:
+            full_text = (text + " ") * count
+            if len(full_text) > 4096:
+                full_text = full_text[:4090] + "..."
+                print("⚠️ متن خیلی طولانی بود، کوتاه شد تا تلگرام ارور نده.")
+            await client.send_message(chat_id, full_text, reply_to=reply_to)
+    except Exception as e:
+        print(f"❌ خطا در اسپم: {type(e).__name__}: {e}")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^اسپم ([12۱۲]) ([\d۰-۹]+) (.+)$'))
+async def spam_handler(event):
+    # تبدیل اعداد فارسی به انگلیسی
+    model_str = fa_to_en_digits(event.pattern_match.group(1))
+    count_str = fa_to_en_digits(event.pattern_match.group(2))
+    
+    model = int(model_str)
+    count = int(count_str)
+    text = event.pattern_match.group(3)
+    chat_id = event.chat_id
+    
+    if count > 1000:
+        await event.reply("❗ برای جلوگیری از بن، حداکثر تعداد ۱۰۰۰ تعیین شده.")
+        return
+
+    # بررسی اینکه آیا کاربر روی پیامی ریپلای کرده یا نه
+    reply_to_id = None
+    if event.message.is_reply:
+        replied_msg = await event.message.get_reply_message()
+        if replied_msg:
+            reply_to_id = replied_msg.id
+
+    # فرستادن پیام تایید، پاک کردن دستور کاربر و پاک کردن پیام تایید
+    reply_msg = await event.reply(f"🚀 شروع اسپم مدل {model} ({count} بار)...")
+    await event.delete()
+    await reply_msg.delete()
+
+    # اجرای اسپم در پس‌زمینه
+    asyncio.create_task(run_spam(model, count, text, chat_id, reply_to_id))
+# ==============================================
 
 POINTS_INTERVAL = 600
 
@@ -232,6 +303,121 @@ async def stray_cat_handler(event):
                     print("🐈 گربه خیابونی دیده شد! شروع نجات...")
                     await rescue_stray_cat(event.message)
                     return
+
+# ================= سیستم کارخونه =================
+
+async def click_factory_button(msg_id, target_text, timeout=30):
+    for _ in range(timeout):
+        await asyncio.sleep(1)
+        msg = await client.get_messages(group_entity, ids=msg_id)
+        if msg and msg.buttons:
+            for row in msg.buttons:
+                for btn in row:
+                    if target_text in btn.text:
+                        await msg.click(text=btn.text)
+                        print(f"✅ روی دکمه «{btn.text}» کلیک شد.")
+                        return True
+    print(f"⚠️ دکمه شامل «{target_text}» پیدا نشد.")
+    return False
+
+async def click_factory_coords(msg_id, row_idx, col_idx, timeout=30):
+    for _ in range(timeout):
+        await asyncio.sleep(1)
+        msg = await client.get_messages(group_entity, ids=msg_id)
+        if msg and msg.buttons:
+            try:
+                await msg.click(row_idx, col_idx)
+                print(f"✅ روی مختصات (ردیف {row_idx}، ستون {col_idx}) کلیک شد.")
+                return True
+            except Exception:
+                pass
+    print(f"⚠️ دکمه در مختصات (ردیف {row_idx}، ستون {col_idx}) پیدا نشد.")
+    return False
+
+async def factory_cycle():
+    global factory_active
+    while factory_active:
+        try:
+            print("🏭 شروع چرخه کارخونه (فاز تولید)...")
+            await client.send_message(group_entity, "کارخونه میویی")
+            await asyncio.sleep(3)
+            
+            panel_msg = None
+            async for m in client.iter_messages(group_entity, limit=5):
+                if m.buttons:
+                    panel_msg = m
+                    break
+            
+            if not panel_msg:
+                print("⚠️ پنل کارخونه پیدا نشد. تلاش مجدد در ۱۰ ثانیه...")
+                await asyncio.sleep(10)
+                continue
+            
+            panel_id = panel_msg.id
+            
+            if not await click_factory_button(panel_id, "تولید"): continue
+            await asyncio.sleep(2)
+            if not await click_factory_button(panel_id, "تولیدی هواپیما"): continue
+            await asyncio.sleep(2)
+            if not await click_factory_coords(panel_id, 0, 2): continue
+            await asyncio.sleep(2)
+            if not await click_factory_coords(panel_id, 0, 3): continue
+            await asyncio.sleep(2)
+            if not await click_factory_button(panel_id, "شروع تولید"): continue
+            
+            print("⏳ تولید استارت خورد. سیستم ۲۴ ساعت صبر می‌کنه...")
+            waited = 0
+            while waited < 86400 and factory_active:
+                await asyncio.sleep(60)
+                waited += 60
+            
+            if not factory_active:
+                break
+            
+            print("💰 زمان فروش رسید. شروع فاز فروش...")
+            await client.send_message(group_entity, "کارخونه میویی")
+            await asyncio.sleep(3)
+            
+            panel_msg = None
+            async for m in client.iter_messages(group_entity, limit=5):
+                if m.buttons:
+                    panel_msg = m
+                    break
+            
+            if not panel_msg:
+                print("⚠️ پنل فروش پیدا نشد.")
+                continue
+            
+            panel_id = panel_msg.id
+            
+            if not await click_factory_button(panel_id, "انبار"): continue
+            await asyncio.sleep(2)
+            if not await click_factory_coords(panel_id, 0, 0): continue
+            await asyncio.sleep(2)
+            if not await click_factory_button(panel_id, "فروش محصول"): continue
+            
+            print("✅ فروش انجام شد. چرخه از اول تکرار میشه...")
+            await asyncio.sleep(3)
+            
+        except Exception as e:
+            print(f"❌ خطا در کارخونه: {type(e).__name__}: {e}")
+            await asyncio.sleep(10)
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^کارخونه میویی روشن$'))
+async def factory_on(event):
+    global factory_active
+    if not factory_active:
+        factory_active = True
+        await event.reply("🏭 سیستم کارخونه میویی **روشن** شد.")
+        asyncio.create_task(factory_cycle())
+    else:
+        await event.reply("❗ کارخونه از قبل روشنه.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^کارخونه میویی خاموش$'))
+async def factory_off(event):
+    global factory_active
+    factory_active = False
+    await event.reply("🛑 سیستم کارخونه میویی **خاموش** شد.")
 
 async def main():
     global group_entity
