@@ -71,27 +71,30 @@ NOTES_PASSWORD = "amir1370"
 # متغیرهای ویس به متن
 vosk_model = None
 
-# ================= توابع دیتابیس =================
+# ================= توابع دیتابیس (اصلاح شده و بسیار سریع) =================
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list
-    async for msg in client.iter_messages('me', search=DB_TAG):
-        if msg.text and msg.text.startswith(DB_TAG):
+    # بررسی ۵۰۰ پیام آخر پیام‌های ذخیره شده
+    async for msg in client.iter_messages('me', limit=500):
+        if msg.text and DB_TAG in msg.text:
             try:
-                json_str = msg.text[len(DB_TAG):].strip()
+                json_str = msg.text.replace(DB_TAG, "").strip()
                 if json_str.startswith("```json"):
                     json_str = json_str[7:]
                 if json_str.endswith("```"):
                     json_str = json_str[:-3]
                 json_str = json_str.strip()
-                data = json.loads(json_str)
-                anti_delete_targets = {int(k): v for k, v in data.get("anti_delete", {}).items()}
-                tag_targets = {int(k): v for k, v in data.get("tags", {}).items()}
-                notes_list = data.get("notes", [])
-                keywords_list = set(data.get("keywords", []))
-                print("✅ دیتابیس از تلگرام بارگذاری شد.")
+                
+                if json_str:
+                    data = json.loads(json_str)
+                    anti_delete_targets = {int(k): v for k, v in data.get("anti_delete", {}).items()}
+                    tag_targets = {int(k): v for k, v in data.get("tags", {}).items()}
+                    notes_list = data.get("notes", [])
+                    keywords_list = set(data.get("keywords", []))
+                    print("✅ دیتابیس از تلگرام بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
-        break
+            return # وقتی پیداش کرد، از حلقه خارج میشه
 
 async def save_db():
     data = {
@@ -102,16 +105,19 @@ async def save_db():
     }
     json_str = json.dumps(data, ensure_ascii=False, indent=2)
     text_to_save = f"{DB_TAG}\n```json\n{json_str}\n```"
+    
     found_msg = None
-    async for msg in client.iter_messages('me', search=DB_TAG):
-        if msg.text and msg.text.startswith(DB_TAG):
+    async for msg in client.iter_messages('me', limit=500):
+        if msg.text and DB_TAG in msg.text:
             found_msg = msg
             break
+            
     try:
         if found_msg:
-            await found_msg.edit(text_to_save)
+            if found_msg.text != text_to_save:
+                await found_msg.edit(text_to_save, link_preview=False)
         else:
-            await client.send_message('me', text_to_save)
+            await client.send_message('me', text_to_save, link_preview=False)
     except Exception as e:
         print(f"❌ خطا در ذخیره دیتابیس: {e}")
 # ==============================================
@@ -369,7 +375,6 @@ async def voice_to_text(event):
         voice_path = await reply_msg.download_media()
         wav_path = voice_path.replace(".ogg", ".wav")
         
-        # تبدیل ogg به wav
         data, samplerate = sf.read(voice_path)
         sf.write(wav_path, data, samplerate)
         
@@ -1125,3 +1130,4 @@ if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
     with client:
         client.loop.run_until_complete(main())
+        
