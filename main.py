@@ -1,6 +1,8 @@
 import asyncio
 import re
 import json
+import os
+import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from telethon import TelegramClient, events, utils
@@ -8,6 +10,16 @@ from telethon.tl.functions.account import UpdateProfileRequest
 from deep_translator import GoogleTranslator
 from flask import Flask
 import threading
+
+# کتابخونه‌های ویس به متن
+try:
+    from vosk import Model, KaldiRecognizer
+    import soundfile as sf
+    import wave
+    VOSK_AVAILABLE = True
+except ImportError:
+    VOSK_AVAILABLE = False
+    print("⚠️ کتابخونه vosk نصب نیست. سیستم ویس به متن غیرفعاله.")
 
 app = Flask(__name__)
 
@@ -31,7 +43,7 @@ fishing_active = False
 stray_cat_active = True
 factory_active = False
 
-# متغیرهای سیستم دیتابیس (برای ذخیره در تلگرام)
+# متغیرهای سیستم دیتابیس
 DB_TAG = "#DATABASE_AMIR"
 
 # متغیرهای سیستم ضد حذف
@@ -54,16 +66,23 @@ tag_targets = {}
 
 # متغیرهای سیستم یادداشت
 notes_list = []
-NOTES_PASSWORD = "amir1370" # رمز یادداشت‌ها
+NOTES_PASSWORD = "amir1370"
 
-# ================= توابع دیتابیس (ذخیره در پیام‌های ذخیره شده) =================
+# متغیرهای ویس به متن
+vosk_model = None
+
+# ================= توابع دیتابیس =================
 async def load_db():
-    """بارگذاری اطلاعات از پیام‌های ذخیره شده هنگام روشن شدن ربات"""
     global anti_delete_targets, tag_targets, notes_list, keywords_list
     async for msg in client.iter_messages('me', search=DB_TAG):
         if msg.text and msg.text.startswith(DB_TAG):
             try:
                 json_str = msg.text[len(DB_TAG):].strip()
+                if json_str.startswith("```json"):
+                    json_str = json_str[7:]
+                if json_str.endswith("```"):
+                    json_str = json_str[:-3]
+                json_str = json_str.strip()
                 data = json.loads(json_str)
                 anti_delete_targets = {int(k): v for k, v in data.get("anti_delete", {}).items()}
                 tag_targets = {int(k): v for k, v in data.get("tags", {}).items()}
@@ -72,10 +91,9 @@ async def load_db():
                 print("✅ دیتابیس از تلگرام بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
-        break # فقط اولین پیام پیدا شده رو می‌خونیم
+        break
 
 async def save_db():
-    """ذخیره اطلاعات در پیام‌های ذخیره شده (آپدیت کردن پیام قبلی)"""
     data = {
         "anti_delete": {str(k): v for k, v in anti_delete_targets.items()},
         "tags": {str(k): v for k, v in tag_targets.items()},
@@ -84,13 +102,11 @@ async def save_db():
     }
     json_str = json.dumps(data, ensure_ascii=False, indent=2)
     text_to_save = f"{DB_TAG}\n```json\n{json_str}\n```"
-    
     found_msg = None
     async for msg in client.iter_messages('me', search=DB_TAG):
         if msg.text and msg.text.startswith(DB_TAG):
             found_msg = msg
             break
-            
     try:
         if found_msg:
             await found_msg.edit(text_to_save)
@@ -100,7 +116,6 @@ async def save_db():
         print(f"❌ خطا در ذخیره دیتابیس: {e}")
 # ==============================================
 
-# تابع تبدیل اعداد فارسی به انگلیسی
 def fa_to_en_digits(text):
     persian_digits = '۰۱۲۳۴۵۶۷۸۹'
     english_digits = '0123456789'
@@ -127,111 +142,47 @@ def strip_clock(name):
             return parts[0]
     return name
 
-# ================= سیستم هلپ (بسیار جامع و روان) =================
+# ================= سیستم هلپ =================
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هلپ$'))
 async def help_handler(event):
     help_text = (
         "📖 **راهنمای جامع و کامل سلف‌بات** 🤖\n\n"
-        "سلام! من دستیار شخصی شما در تلگرام و بازی‌ها هستم. تمام دستورات من به صورت زیر دسته‌بندی شده‌اند:\n\n"
-        
         "━━━━━━━━━━━━━━━\n"
         "🛠 **بخش اول: ابزارهای کاربردی**\n"
         "━━━━━━━━━━━━━━━\n\n"
-        
-        "🔹 **ترجمه کن**\n"
-        "🧾 *چه کاری می‌کند؟* متن پیام دیگران را به فارسی ترجمه می‌کند.\n"
-        "📝 *چگونه استفاده کنم؟* روی پیام مورد نظر ریپلای کنید و بنویسید `ترجمه کن`.\n\n"
-        
-        "🔹 **اسپم [مدل] [تعداد] [تاخیر] [متن]**\n"
-        "🧾 *چه کاری می‌کند؟* پیام‌های تکراری می‌فرستد.\n"
-        "📝 *مدل ۱ (پیام جداگانه):* `اسپم 1 10 سلام` (ده پیام سلام با فاصله نیم ثانیه)\n"
-        "📝 *مدل ۱ با تاخیر دلخواه:* `اسپم 1 10 5 سلام` (ده پیام با فاصله ۵ ثانیه)\n"
-        "📝 *مدل ۲ (یک پیام چنتایی):* `اسپم 2 10 سلام` (یک پیام می‌فرستد که در آن ۱۰ بار نوشته سلام)\n\n"
-        
-        "🔹 **پاکسازی [تعداد]**\n"
-        "🧾 *چه کاری می‌کند؟* پیام‌های خودتان را در چت برای همه پاک می‌کند.\n"
-        "📝 *مثال:* `پاکسازی 50` (۵۰ پیام آخر شما را پاک می‌کند)\n\n"
-
-        "🔹 **یادداشت [متن]**\n"
-        "🧾 *چه کاری می‌کند؟* یک یادداشت شخصی برای شما ذخیره می‌کند.\n"
-        "📝 *مثال:* `یادداشت باید فلان کار رو بکنم`\n\n"
-        "🔹 **یادداشت بخوان [رمز]**\n"
-        "🧾 *چه کاری می‌کند؟* یادداشت‌های شما را نشان می‌دهد (برای حفظ حریم خصوصی نیاز به رمز دارد).\n"
-        "📝 *مثال:* `یادداشت بخوان amir1370`\n\n"
-        "🔹 **یادداشت پاک [رمز]**\n"
-        "🧾 *چه کاری می‌کند؟* تمام یادداشت‌ها را پاک می‌کند.\n"
-        "📝 *مثال:* `یادداشت پاک amir1370`\n\n"
-
+        "🔹 **ترجمه کن** (با ریپلای) -> ترجمه متن به فارسی.\n\n"
+        "🔹 **اسپم [مدل] [تعداد] [تاخیر] [متن]** -> `اسپم 1 10 5 سلام`\n\n"
+        "🔹 **پاکسازی [تعداد]** -> پاک کردن پیام‌های خودتان.\n\n"
+        "🔹 **یادداشت [متن]** / **یادداشت بخوان [رمز]** / **یادداشت پاک [رمز]**\n"
+        "سیستم فلش مموری شخصی (رمز: amir1370).\n\n"
+        "🔹 **متن** (با ریپلای روی ویس) -> استخراج متن از ویس فارسی/خارجی.\n\n"
         "━━━━━━━━━━━━━━━\n"
-        "🕵️ **بخش دوم: ابزارهای مانیتورینگ و جاسوسی**\n"
+        "🕵️ **بخش دوم: ابزارهای مانیتورینگ**\n"
         "━━━━━━━━━━━━━━━\n\n"
-        
-        "🔹 **ضد حذف روشن / ضد حذف خاموش**\n"
-        "🧾 *چه کاری می‌کند؟* سیستم ضبط پیام‌های پاک شده را روشن یا خاموش می‌کند.\n\n"
-        
-        "🔹 **اد حذف [آیدی]** یا **اد حذف** (با ریپلای)\n"
-        "🧾 *چه کاری می‌کند؟* شخص را به لیست ضد حذف اضافه می‌کند. اگر این شخص در هر گپی پیامی پاک کرد، ربات آن را برای شما در پیام‌های ذخیره شده ارسال می‌کند.\n"
-        "📝 *مثال:* `اد حذف @F35_JK` یا `اد حذف 12345678`\n\n"
-        
-        "🔹 **حذف اد [آیدی/اسم]** یا **حذف اد** (با ریپلای)\n"
-        "🧾 *چه کاری می‌کند؟* شخص را از لیست ضد حذف برمی‌دارد.\n\n"
-        
-        "🔹 **لیست اد حذف**\n"
-        "🧾 *چه کاری می‌کند؟* اسامی و آیدی افراد تحت مانیتورینگ را نشان می‌دهد.\n\n"
-
-        "🔹 **هشدار [کلمه]** / **هشدار خاموش**\n"
-        "🧾 *چه کاری می‌کند؟* اگر کسی در گروهی این کلمه را تایپ کرد، ربات فوراً پیام او را به پیام‌های ذخیره شده شما فوروارد می‌کند.\n"
-        "📝 *مثال:* `هشدار فری`\n\n"
-        
-        "🔹 **لیست هشدار**\n"
-        "🧾 *چه کاری می‌کند؟* کلمات کلیدی ثبت شده را نشان می‌دهد.\n\n"
-
-        "🔹 **شبح روشن / شبح خاموش**\n"
-        "🧾 *چه کاری می‌کند؟* در این حالت ربات کارهایش را انجام می‌دهد اما پیام‌هایتان تیک آبی نمی‌خورند (خوانده نمیشوند) و آنلاین بودنتان مخفی می‌ماند.\n\n"
-
+        "🔹 **ضد حذف روشن/خاموش** / **اد حذف [آیدی/ریپلای]** / **حذف اد [آیدی/ریپلای]**\n"
+        "ضبط پیام‌های پاک شده افراد.\n\n"
+        "🔹 **هشدار [کلمه]** / **هشدار خاموش** / **لیست هشدار**\n"
+        "ارسال هشدار به پیام‌های ذخیره شده همراه با لینک پیام.\n\n"
+        "🔹 **شبح روشن / شبح خاموش** -> مخفی ماندن آنلاین بودن و عدم خواندن پیام‌ها.\n\n"
         "━━━━━━━━━━━━━━━\n"
         "📌 **بخش سوم: ابزارهای منشن و تگ**\n"
         "━━━━━━━━━━━━━━━\n\n"
-        
-        "🔹 **اد تگ [آیدی] [اسم]** یا **اد تگ** (با ریپلای)\n"
-        "🧾 *چه کاری می‌کند؟* شخص را برای تگ شدن به لیست اضافه می‌کند.\n"
-        "📝 *مثال:* `اد تگ 123456 علی` یا با ریپلای `اد تگ اد شه`\n\n"
-        
-        "🔹 **حذف تگ [آیدی/اسم]** یا **حذف تگ** (با ریپلای)\n"
-        "🧾 *چه کاری می‌کند؟* شخص را از لیست تگ حذف می‌کند.\n\n"
-        
-        "🔹 **لیست تگ**\n"
-        "🧾 *چه کاری می‌کند؟* لیست افراد قابل تگ را نشان می‌دهد.\n\n"
-        
-        "🔹 **تگ همه**\n"
-        "🧾 *چه کاری می‌کند؟* تمام افراد لیست را تگ می‌کند. (اگر روی پیامی ریپلای کنید، تگ به آن پیام ریپلای می‌شود). دستور شما پس از اجرا پاک می‌شود.\n\n"
-        
-        "🔹 **تگ [اسم]**\n"
-        "🧾 *چه کاری می‌کند؟* فقط یک شخص خاص را تگ می‌کند. دستور پاک می‌شود.\n"
-        "📝 *مثال:* `تگ علی`\n\n"
-
+        "🔹 **اد تگ [آیدی/ریپلای] [اسم]** / **حذف تگ [آیدی/اسم/ریپلای]** / **لیست تگ**\n\n"
+        "🔹 **تگ همه** (با ریپلای/بدون ریپلای) -> تگ کردن همه افراد لیست.\n\n"
+        "🔹 **تگ [اسم]** -> تگ کردن یک شخص خاص.\n\n"
         "━━━━━━━━━━━━━━━\n"
         "ℹ️ **بخش چهارم: اطلاعات و زمان‌بندی**\n"
         "━━━━━━━━━━━━━━━\n\n"
-        
-        "🔹 **اطلاعات [آیدی]** یا **اطلاعات** (با ریپلای)\n"
-        "🧾 *چه کاری می‌کند؟* مشخصات کاربر (نام، آیدی عددی، یوزرنیم، شماره) را نشان می‌دهد.\n\n"
-        
-        "🔹 **زمان [ساعت] [متن]** یا **زمان [آیدی] [ساعت] [متن]**\n"
-        "🧾 *چه کاری می‌کند؟* پیام شما را در زمان مشخصی ارسال می‌کند.\n"
-        "📝 *مثال:* `زمان 14:30 رسیدم` یا `زمان @user 14:30 سلام`\n\n"
-        
-        "🔹 **لیست زمان**\n"
-        "🧾 *چه کاری می‌کند؟* پیام‌های در انتظار ارسال را نشان می‌دهد.\n\n"
-
+        "🔹 **اطلاعات [آیدی/ریپلای]** -> دریافت مشخصات کاربر.\n\n"
+        "🔹 **زمان [ساعت] [متن]** یا **زمان [آیدی] [ساعت] [متن]** -> ارسال زمان‌بندی شده.\n\n"
+        "🔹 **لیست زمان** -> مشاهده پیام‌های زمان‌بندی شده.\n\n"
         "━━━━━━━━━━━━━━━\n"
         "🎮 **بخش پنجم: سیستم‌های بازی**\n"
         "━━━━━━━━━━━━━━━\n\n"
-        
-        "🔹 **پوینت روشن/خاموش** (هر ۱۰ دقیقه پوینت می‌گیرد)\n"
-        "🔹 **ماهی روشن/خاموش** (هر ۳۰ دقیقه ماهیگیری می‌کند)\n"
-        "🔹 **کارخونه میویی روشن/خاموش** (تولید و فروش خودکار هر ۱۳ ساعت و ۱۵ دقیقه)\n\n"
-        "⚠️ *نکته:* تمام لیست‌ها (اد حذف، تگ، یادداشت و...) در پیام‌های ذخیره شده شما با هشتگ #DATABASE_AMIR ذخیره می‌شوند تا با ری‌استارت ربات پاک نشوند."
+        "🔹 **پوینت روشن/خاموش** (هر ۱۰ دقیقه)\n"
+        "🔹 **ماهی روشن/خاموش** (هر ۳۰ دقیقه)\n"
+        "🔹 **کارخونه میویی روشن/خاموش** (هر ۱۳ ساعت و ۱۵ دقیقه)\n\n"
+        "⚠️ تمام لیست‌ها در پیام‌های ذخیره شده با هشتگ #DATABASE_AMIR ذخیره می‌شوند."
     )
     await event.reply(help_text)
 # ==============================================
@@ -276,19 +227,15 @@ async def spam_handler(event):
     if len(args) < 3:
         await event.reply("❗ فرمت اشتباه است.\nمثال: `اسپم 1 10 سلام`")
         return
-        
     model_str = fa_to_en_digits(args[0])
     count_str = fa_to_en_digits(args[1])
-    
     if not model_str.isdigit() or not count_str.isdigit():
         await event.reply("❗ مدل و تعداد باید عدد باشند.")
         return
-        
     model = int(model_str)
     count = int(count_str)
     text = ""
     delay = 0.5
-    
     if len(args) >= 4:
         potential_delay = fa_to_en_digits(args[2]).replace('.', '', 1)
         if potential_delay.isdigit():
@@ -298,25 +245,20 @@ async def spam_handler(event):
             text = " ".join(args[2:])
     else:
         text = " ".join(args[2:])
-        
     if not text:
         await event.reply("❗ متنی برای اسپم وارد نشده.")
         return
-        
     if count > 1000:
         await event.reply("❗ حداکثر تعداد ۱۰۰۰ تعیین شده.")
         return
-
     reply_to_id = None
     if event.message.is_reply:
         replied_msg = await event.message.get_reply_message()
         if replied_msg:
             reply_to_id = replied_msg.id
-
     reply_msg = await event.reply(f"🚀 شروع اسپم مدل {model} ({count} بار با تاخیر {delay}ث)...")
     await event.delete()
     await reply_msg.delete()
-
     asyncio.create_task(run_spam(model, count, text, event.chat_id, reply_to_id, delay))
 # ==============================================
 
@@ -327,7 +269,6 @@ async def clear_handler(event):
     if count > 1000:
         await event.reply("❗ حداکثر ۱۰۰۰ پیام در دفعات.")
         return
-        
     await event.delete()
     deleted_count = 0
     async for msg in client.iter_messages(event.chat_id, from_user='me', limit=count):
@@ -342,14 +283,14 @@ async def clear_handler(event):
     await confirm.delete()
 # ==============================================
 
-# ================= سیستم یادداشت (با دیتابیس) =================
+# ================= سیستم یادداشت =================
 @client.on(events.NewMessage(outgoing=True, pattern=r'^یادداشت\s+(.+)$'))
 async def add_note(event):
     note_text = event.pattern_match.group(1)
     if note_text.startswith("بخوان") or note_text.startswith("پاک"):
         return
     notes_list.append(note_text)
-    await save_db() # ذخیره در تلگرام
+    await save_db()
     await event.reply("📝 یادداشت با موفقیت ذخیره شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^یادداشت بخوان\s+(\S+)$'))
@@ -371,13 +312,96 @@ async def delete_notes(event):
     pwd = event.pattern_match.group(1)
     if pwd == NOTES_PASSWORD:
         notes_list.clear()
-        await save_db() # آپدیت در تلگرام
+        await save_db()
         await event.reply("🧹 تمام یادداشت‌ها پاک شدند.")
     else:
         await event.reply("❌ رمز عبور اشتباه است.")
 # ==============================================
 
-# ================= سیستم هشدار کلمات (با دیتابیس) =================
+# ================= سیستم ویس به متن =================
+async def setup_vosk():
+    global vosk_model
+    if not VOSK_AVAILABLE:
+        return None
+    if vosk_model:
+        return vosk_model
+    
+    model_path = "vosk-model-small-fa-0.4"
+    if not os.path.exists(model_path):
+        await client.send_message('me', "⏳ در حال دانلود مدل تشخیص گفتار فارسی (فقط یک بار زمان می‌برد)...")
+        url = "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.4.zip"
+        zip_path = "model.zip"
+        try:
+            urllib.request.urlretrieve(url, zip_path)
+            import zipfile
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(".")
+            os.remove(zip_path)
+        except Exception as e:
+            await client.send_message('me', f"❌ خطا در دانلود مدل: {e}")
+            return None
+            
+    vosk_model = Model(model_path)
+    return vosk_model
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^متن$'))
+async def voice_to_text(event):
+    if not VOSK_AVAILABLE:
+        await event.reply("❌ کتابخونه vosk نصب نیست.")
+        return
+    if not event.message.is_reply:
+        await event.reply("❗ روی یه ویس ریپلای کن و بفرست.")
+        return
+        
+    reply_msg = await event.get_reply_message()
+    if not reply_msg or not reply_msg.voice:
+        await event.reply("❗ این پیام ویس نیست.")
+        return
+        
+    wait_msg = await event.reply("⏳ در حال پردازش ویس...")
+    
+    try:
+        model = await setup_vosk()
+        if not model:
+            await wait_msg.edit("❌ مدل لود نشد.")
+            return
+
+        voice_path = await reply_msg.download_media()
+        wav_path = voice_path.replace(".ogg", ".wav")
+        
+        # تبدیل ogg به wav
+        data, samplerate = sf.read(voice_path)
+        sf.write(wav_path, data, samplerate)
+        
+        wf = wave.open(wav_path, "rb")
+        rec = KaldiRecognizer(model, wf.getframerate())
+        
+        final_text = ""
+        while True:
+            data = wf.readframes(4000)
+            if len(data) == 0:
+                break
+            if rec.AcceptWaveform(data):
+                res = json.loads(rec.Result())
+                final_text += res.get("text", "")
+        
+        res = json.loads(rec.FinalResult())
+        final_text += res.get("text", "")
+        
+        wf.close()
+        os.remove(voice_path)
+        os.remove(wav_path)
+        
+        if final_text.strip():
+            await wait_msg.edit(f"🎙 **متن ویس:**\n\n{final_text}")
+        else:
+            await wait_msg.edit("❌ ویس خالی است یا حرف‌ها نامفهوم بودند.")
+            
+    except Exception as e:
+        await wait_msg.edit(f"❌ خطا در پردازش: {e}")
+# ==============================================
+
+# ================= سیستم هشدار کلمات =================
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هشدار\s+(.+)$'))
 async def add_keyword_alert(event):
     global keyword_alert_active
@@ -395,10 +419,9 @@ async def add_keyword_alert(event):
             text += f"▫️ `{kw}`\n"
         await event.reply(text)
         return
-        
     keywords_list.add(keyword)
     keyword_alert_active = True
-    await save_db() # ذخیره در تلگرام
+    await save_db()
     await event.reply(f"✅ کلمه `{keyword}` به لیست هشدار اضافه شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^لیست هشدار$'))
@@ -425,14 +448,24 @@ async def keyword_alert_handler(event):
                 chat = await event.get_chat()
                 sender_name = getattr(sender, 'first_name', None) or getattr(sender, 'title', None) or "ناشناس"
                 chat_name = getattr(chat, 'title', None) or "پیوی"
-                
+                msg_link = "ندارد"
+                if event.chat_id < 0:
+                    chat_id_str = str(event.chat_id)
+                    if chat_id_str.startswith("-100"):
+                        internal_id = chat_id_str[4:]
+                    else:
+                        internal_id = chat_id_str[1:]
+                    msg_link = f"https://t.me/c/{internal_id}/{event.id}"
+                elif hasattr(chat, 'username') and chat.username:
+                    msg_link = f"https://t.me/{chat.username}/{event.id}"
                 alert_text = (
                     f"🚨 **هشدار کلمه کلیدی: `{kw}`**\n\n"
                     f"👤 فرستنده: {sender_name}\n"
-                    f"💬 چت: {chat_name}\n\n"
+                    f"💬 چت: {chat_name}\n"
+                    f"🔗 لینک پیام: {msg_link}\n\n"
                     f"📝 متن:\n{text}"
                 )
-                await client.send_message('me', alert_text)
+                await client.send_message('me', alert_text, link_preview=False)
             except:
                 pass
             break
@@ -451,7 +484,7 @@ async def ghost_mode_toggle(event):
         await event.reply("🛑 حالت شبح **خاموش** شد.")
 # ==============================================
 
-# ================= سیستم ضد حذف (با دیتابیس) =================
+# ================= سیستم ضد حذف =================
 @client.on(events.NewMessage(outgoing=True, pattern=r'^ضد حذف (روشن|خاموش)$'))
 async def anti_delete_toggle(event):
     global anti_delete_active
@@ -476,7 +509,6 @@ async def add_anti_delete(event):
     else:
         await event.reply("❗ فرمت اشتباه است. روی پیام ریپلای کنید یا آیدی بده.")
         return
-
     added_list = []
     for target in targets_str:
         try:
@@ -496,9 +528,8 @@ async def add_anti_delete(event):
             added_list.append(f"{name} (`{pid}`)")
         except:
             await event.reply(f"❌ `{target}` پیدا نشد.")
-
     if added_list:
-        await save_db() # ذخیره در تلگرام
+        await save_db()
         await event.reply("✅ اضافه شدند:\n" + "\n".join(added_list))
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد(?:\s+(.+))?$'))
@@ -514,7 +545,6 @@ async def remove_anti_delete(event):
     else:
         await event.reply("❗ فرمت اشتباه است. روی پیام ریپلای کنید یا آیدی بده.")
         return
-
     removed_list = []
     for target in targets_str:
         try:
@@ -528,9 +558,8 @@ async def remove_anti_delete(event):
                 del anti_delete_targets[pid]
         except:
             pass
-
     if removed_list:
-        await save_db() # ذخیره در تلگرام
+        await save_db()
         await event.reply("❌ حذف شدند:\n" + ", ".join(removed_list))
     else:
         await event.reply("کسی برای حذف پیدا نشد.")
@@ -656,7 +685,7 @@ async def schedule_loop():
         await asyncio.sleep(20)
 # ==============================================
 
-# ================= سیستم تگ (با دیتابیس) =================
+# ================= سیستم تگ =================
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد تگ(?:\s+(اد شه|(.+)))?$'))
 async def add_tag(event):
     text_arg = event.pattern_match.group(2)
@@ -666,7 +695,7 @@ async def add_tag(event):
             uid = replied_msg.sender_id
             name = getattr(replied_msg.sender, 'first_name', None) or "ناشناس"
             tag_targets[uid] = name
-            await save_db() # ذخیره در تلگرام
+            await save_db()
             await event.reply(f"✅ `{name}` به لیست تگ اضافه شد.")
     elif text_arg:
         parts = text_arg.split()
@@ -679,7 +708,7 @@ async def add_tag(event):
                 ent = await client.get_entity(target)
                 uid = utils.get_peer_id(ent)
             tag_targets[uid] = name
-            await save_db() # ذخیره در تلگرام
+            await save_db()
             await event.reply(f"✅ `{name}` به لیست تگ اضافه شد.")
         except:
             await event.reply("❌ پیدا نشد.")
@@ -691,7 +720,6 @@ async def remove_tag(event):
     text_arg = event.pattern_match.group(1)
     target_val = None
     is_name_search = False
-    
     if event.message.is_reply and not text_arg:
         replied_msg = await event.get_reply_message()
         if replied_msg:
@@ -706,16 +734,14 @@ async def remove_tag(event):
     else:
         await event.reply("❗ روی پیام ریپلای کنید یا آیدی/اسم بده.")
         return
-
     found = False
     for uid, name in list(tag_targets.items()):
         if (is_name_search and name == target_val) or (not is_name_search and uid == target_val):
             del tag_targets[uid]
-            await save_db() # ذخیره در تلگرام
+            await save_db()
             await event.reply(f"❌ `{name}` از لیست تگ حذف شد.")
             found = True
             break
-        
     if not found:
         await event.reply("❗ این شخص در لیست تگ وجود ندارد.")
 
@@ -737,13 +763,11 @@ async def tag_all(event):
     mention_text = "📢 **تگ همه:**\n\n"
     for uid, name in tag_targets.items():
         mention_text += f'<a href="tg://user?id={uid}">{name}</a> '
-    
     reply_to_id = None
     if event.message.is_reply:
         replied_msg = await event.message.get_reply_message()
         if replied_msg:
             reply_to_id = replied_msg.id
-            
     await event.delete()
     await client.send_message(event.chat_id, mention_text, reply_to=reply_to_id, parse_mode='html')
 
@@ -758,14 +782,12 @@ async def tag_single(event):
     if not target_uid:
         await event.reply(f"❗ `{name_to_tag}` در لیست تگ نیست.")
         return
-        
     mention_text = f'<a href="tg://user?id={target_uid}">{name_to_tag}</a>'
     reply_to_id = None
     if event.message.is_reply:
         replied_msg = await event.message.get_reply_message()
         if replied_msg:
             reply_to_id = replied_msg.id
-            
     await event.delete()
     await client.send_message(event.chat_id, mention_text, reply_to=reply_to_id, parse_mode='html')
 # ==============================================
@@ -791,13 +813,11 @@ async def user_info(event):
     else:
         await event.reply("❗ روی پیام ریپلای کنید یا آیدی بده.")
         return
-
     name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or "ناشناس"
     uid = entity.id
     username = f"@{entity.username}" if hasattr(entity, 'username') and entity.username else "ندارد"
     phone = getattr(entity, 'phone', None)
     phone_str = f"+{phone}" if phone else "مخفی/نامشخص"
-    
     info_text = (
         f"👤 **اطلاعات کاربر**\n\n"
         f"📛 **اسم:** {name}\n"
@@ -1014,20 +1034,16 @@ async def factory_cycle():
             print("🏭 شروع چرخه کارخونه (فاز تولید)...")
             await client.send_message(group_entity, "کارخونه میویی")
             await asyncio.sleep(3)
-            
             panel_msg = None
             async for m in client.iter_messages(group_entity, limit=5):
                 if m.buttons:
                     panel_msg = m
                     break
-            
             if not panel_msg:
                 print("⚠️ پنل کارخونه پیدا نشد. تلاش مجدد در ۱۰ ثانیه...")
                 await asyncio.sleep(10)
                 continue
-            
             panel_id = panel_msg.id
-            
             if not await click_factory_button(panel_id, "تولید"): continue
             await asyncio.sleep(2)
             if not await click_factory_button(panel_id, "تولیدی هواپیما"): continue
@@ -1037,42 +1053,33 @@ async def factory_cycle():
             if not await click_factory_coords(panel_id, 0, 3): continue
             await asyncio.sleep(2)
             if not await click_factory_button(panel_id, "شروع تولید"): continue
-            
             print("⏳ تولید استارت خورد. سیستم ۱۳ ساعت و ۱۵ دقیقه صبر می‌کنه...")
             waited = 0
             # 13 ساعت (46800 ثانیه) + 15 دقیقه (900 ثانیه) = 47700
             while waited < 47700 and factory_active: # 13.25 ساعت
                 await asyncio.sleep(60)
                 waited += 60
-            
             if not factory_active:
                 break
-            
             print("💰 زمان فروش رسید. شروع فاز فروش...")
             await client.send_message(group_entity, "کارخونه میویی")
             await asyncio.sleep(3)
-            
             panel_msg = None
             async for m in client.iter_messages(group_entity, limit=5):
                 if m.buttons:
                     panel_msg = m
                     break
-            
             if not panel_msg:
                 print("⚠️ پنل فروش پیدا نشد.")
                 continue
-            
             panel_id = panel_msg.id
-            
             if not await click_factory_button(panel_id, "انبار"): continue
             await asyncio.sleep(2)
             if not await click_factory_coords(panel_id, 0, 0): continue
             await asyncio.sleep(2)
             if not await click_factory_button(panel_id, "فروش محصول"): continue
-            
             print("✅ فروش انجام شد. چرخه از اول تکرار میشه...")
             await asyncio.sleep(3)
-            
         except Exception as e:
             print(f"❌ خطا در کارخونه: {type(e).__name__}: {e}")
             await asyncio.sleep(10)
@@ -1096,14 +1103,10 @@ async def factory_off(event):
 async def main():
     global group_entity
     await client.start()
-    
-    # لود کردن دیتابیس از تلگرام
     await load_db()
-    
     group_entity = await client.get_entity(TARGET_GROUP)
     print(f"✅ گروه پیدا شد: {group_entity.title}")
     print("✅ سلف‌بات Amir روشن شد!")
-
     await asyncio.gather(
         meow_loop(),
         update_name_clock(),
