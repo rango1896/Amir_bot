@@ -22,7 +22,8 @@ API_HASH = "344583e45741c457fe1862106095a5eb"
 TARGET_GROUP = -1004290700072
 group_entity = None
 
-client = TelegramClient('sessions/amir_session', API_ID, API_HASH, parse_mode='html')
+# مشکل parse_mode در اینجا برطرف شد
+client = TelegramClient('sessions/amir_session', API_ID, API_HASH)
 
 collect_points_active = False
 fishing_active = False
@@ -530,7 +531,7 @@ async def tag_all(event):
     if not tag_targets:
         await event.reply("❗ لیست تگ خالی است.")
         return
-    mention_text = "📢 **تگ所有人:**\n\n"
+    mention_text = "📢 **تگ همه:**\n\n"
     for uid, name in tag_targets.items():
         mention_text += f'<a href="tg://user?id={uid}">{name}</a> '
     
@@ -541,7 +542,8 @@ async def tag_all(event):
             reply_to_id = replied_msg.id
             
     await event.delete()
-    await client.send_message(event.chat_id, mention_text, reply_to=reply_to_id)
+    # parse_mode فقط برای این پیام فعال میشه
+    await client.send_message(event.chat_id, mention_text, reply_to=reply_to_id, parse_mode='html')
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^تگ\s+(.+)$'))
 async def tag_single(event):
@@ -563,7 +565,8 @@ async def tag_single(event):
             reply_to_id = replied_msg.id
             
     await event.delete()
-    await client.send_message(event.chat_id, mention_text, reply_to=reply_to_id)
+    # parse_mode فقط برای این پیام فعال میشه
+    await client.send_message(event.chat_id, mention_text, reply_to=reply_to_id, parse_mode='html')
 # ==============================================
 
 # ================= سیستم اطلاعات کاربر =================
