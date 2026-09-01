@@ -4,6 +4,7 @@ import os
 import urllib.request
 from datetime import datetime
 from telethon import events, utils
+from telethon.errors import FloodWaitError
 from deep_translator import GoogleTranslator
 import core
 from core import client, fa_to_en_digits, save_db, TEHRAN_TZ
@@ -17,27 +18,102 @@ try:
 except ImportError:
     VOSK_AVAILABLE = False
 
-# --- هلپ ---
+# --- ماشین حساب (پشتیبانی از حروف فارسی) ---
+def parse_persian_math(text):
+    mapping = {
+        'صفر': '0', 'یک': '1', 'دو': '2', 'سه': '3', 'چهار': '4', 'پنج': '5',
+        'شش': '6', 'شیش': '6', 'هفت': '7', 'هشت': '8', 'نه': '9', 'ده': '10',
+        'بیست': '20', 'سی': '30', 'چهل': '40', 'پنجاه': '50', 'شصت': '60',
+        'هفتاد': '70', 'هشتاد': '80', 'نود': '90', 'صد': '100', 'هزار': '1000',
+        'میلیون': '1000000',
+        'جمع': '+', 'به‌علاوه': '+', 'به علاوه': '+', 'و': '+',
+        'ضرب': '*', 'ضربدر': '*', 'در': '*',
+        'تقسیم': '/', 'تقسیم‌بر': '/', 'تقسیم بر': '/', 'بخش': '/',
+        'تفریق': '-', 'منهای': '-', 'کم': '-'
+    }
+    words = text.split()
+    translated = []
+    for w in words:
+        w_en = fa_to_en_digits(w)
+        if w_en.isdigit():
+            translated.append(w_en)
+        elif w in mapping:
+            translated.append(mapping[w])
+        else:
+            translated.append(w)
+    return " ".join(translated)
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^محاسبه\s+(.+)$'))
+async def math_calc(event):
+    expr = event.pattern_match.group(1)
+    expr = parse_persian_math(expr)
+    safe_expr = re.sub(r'[^0-9\+\-\*\/\(\)\.\s]', '', expr)
+    if not safe_expr:
+        return await event.reply("❗ عبارت نامعتبر است.")
+    try:
+        result = eval(safe_expr)
+        await event.reply(f"🧮 نتیجه: `{result}`")
+    except:
+        await event.reply("❗ خطا در محاسبه.")
+
+# --- وضعیت ربات ---
+@client.on(events.NewMessage(outgoing=True, pattern=r'^وضعیت$'))
+async def status_handler(event):
+    def st(b): return "✅ روشن" if b else "❌ خاموش"
+    text = (
+        "📊 **وضعیت قابلیت‌های ربات:**\n\n"
+        f"👻 شبح: {st(core.ghost_mode_active)}\n"
+        f"🗑 ضد حذف: {st(core.anti_delete_active)}\n"
+        f"🚨 هشدار کلمات: {st(core.keyword_alert_active)}\n"
+        f"🐈 شکارچی گربه‌ها: {st(core.stray_cat_active)}\n"
+        f"🔹 پوینت خودکار: {st(core.collect_points_active)}\n"
+        f"🎣 ماهیگیری: {st(core.fishing_active)}\n"
+        f"🏭 کارخونه: {st(core.factory_active)}\n"
+    )
+    await event.reply(text)
+
+# --- هلپ (کامل و جامع) ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هلپ$'))
 async def help_handler(event):
     help_text = (
-        "📖 **راهنمای جامع سلف‌بات** 🤖\n\n"
-        "🛠 **ابزارها:**\n"
-        "🔹 `ترجمه کن` (ریپلای)\n"
-        "🔹 `اسپم 1 10 5 سلام` (مدل/تعداد/تاخیر/متن)\n"
-        "🔹 `پاکسازی 50`\n"
-        "🔹 `یادداشت [متن]` / `یادداشت بخوان amir1370`\n"
-        "🔹 `متن` (ریپلای روی ویس)\n\n"
-        "🕵️ **مانیتورینگ:**\n"
-        "🔹 `ضد حذف روشن/خاموش` / `اد حذف [آیدی/ریپلای]` / `حذف اد`\n"
-        "🔹 `هشدار [کلمه]` / `هشدار خاموش`\n"
-        "🔹 `شبح روشن/خاموش`\n\n"
-        "📌 **تگ:**\n"
-        "🔹 `اد تگ [آیدی] [اسم]` / `تگ همه` / `تگ [اسم]`\n\n"
-        "ℹ️ **اطلاعات و زمان:**\n"
-        "🔹 `اطلاعات` (ریپلای)\n"
-        "🔹 `زمان 14:30 سلام`\n\n"
-        "🎮 **بازی:** `پوینت/ماهی/کارخونه میویی روشن/خاموش`"
+        "📖 **راهنمای جامع و کامل سلف‌بات** 🤖\n\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🛠 **بخش اول: ابزارهای کاربردی**\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "🔹 **ترجمه کن** (با ریپلای) -> ترجمه متن به فارسی.\n\n"
+        "🔹 **اسپم [مدل] [تعداد] [تاخیر] [متن]** -> `اسپم 1 10 5 سلام`\n\n"
+        "🔹 **پاکسازی [تعداد]** -> پاک کردن پیام‌های خودتان.\n"
+        "🔹 **پاکسازی همه [تعداد]** -> پاک کردن پیام‌های همه (مخصوص ادمین‌ها).\n\n"
+        "🔹 **یادداشت [متن]** / **یادداشت بخوان [رمز]** / **یادداشت پاک [رمز]**\n"
+        "سیستم فلش مموری شخصی (رمز: amir1370).\n\n"
+        "🔹 **متن** (با ریپلای روی ویس) -> استخراج متن از ویس.\n\n"
+        "🔹 **محاسبه [عبارت]** -> ماشین حساب (عددی یا حروفی)\nمثال: `محاسبه دو ضربدر پنج` یا `محاسبه 10 + 20`\n\n"
+        "🔹 **وضعیت** -> مشاهده وضعیت روشن/خاموش بودن قابلیت‌ها.\n\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🕵️ **بخش دوم: ابزارهای مانیتورینگ**\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "🔹 **ضد حذف روشن/خاموش** / **اد حذف [آیدی/ریپلای]** / **حذف اد**\n"
+        "ضبط پیام‌های پاک شده افراد.\n\n"
+        "🔹 **هشدار [کلمه]** / **هشدار خاموش** / **لیست هشدار**\n"
+        "ارسال هشدار به پیام‌های ذخیره شده همراه با لینک پیام.\n\n"
+        "🔹 **شبح روشن / شبح خاموش** -> مخفی ماندن آنلاین بودن و عدم خواندن پیام‌ها.\n\n"
+        "━━━━━━━━━━━━━━━\n"
+        "📌 **بخش سوم: ابزارهای منشن و تگ**\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "🔹 **اد تگ [آیدی/ریپلای] [اسم]** / **حذف تگ** / **لیست تگ**\n\n"
+        "🔹 **تگ همه** (با ریپلای/بدون ریپلای) -> تگ کردن همه افراد لیست.\n\n"
+        "🔹 **تگ [اسم]** -> تگ کردن یک شخص خاص با نوتیفیکیشن.\n\n"
+        "━━━━━━━━━━━━━━━\n"
+        "ℹ️ **بخش چهارم: اطلاعات و زمان‌بندی**\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "🔹 **اطلاعات** (ریپلای) -> دریافت مشخصات کاربر.\n\n"
+        "🔹 **زمان [ساعت] [متن]** -> `زمان 14:30 سلام`\n\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🎮 **بخش پنجم: سیستم‌های بازی**\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "🔹 **پوینت روشن/خاموش** (هر ۱۰ دقیقه)\n"
+        "🔹 **ماهی روشن/خاموش** (هر ۳۰ دقیقه)\n"
+        "🔹 **کارخونه میویی روشن/خاموش** (هر ۱۳ ساعت و ۱۵ دقیقه)\n"
     )
     await event.reply(help_text)
 
@@ -78,7 +154,6 @@ async def spam_handler(event):
         if fa_to_en_digits(args[2]).replace('.', '', 1).isdigit():
             delay = float(fa_to_en_digits(args[2]))
             text = " ".join(args[3:])
-            
     reply_to_id = None
     if event.message.is_reply:
         r = await event.message.get_reply_message()
@@ -88,19 +163,37 @@ async def spam_handler(event):
     await reply_msg.delete()
     asyncio.create_task(run_spam(model, count, text, event.chat_id, reply_to_id, delay))
 
-# --- پاکسازی ---
-@client.on(events.NewMessage(outgoing=True, pattern=r'^پاکسازی ([\d۰-۹]+)$'))
-async def clear_handler(event):
-    count = int(fa_to_en_digits(event.pattern_match.group(1)))
-    await event.delete()
+# --- پاکسازی پیشرفته (بدون محدودیت و ضد بن) ---
+async def safe_clear(chat_id, limit, only_me=False):
     deleted = 0
-    async for msg in client.iter_messages(event.chat_id, from_user='me', limit=count):
+    async for msg in client.iter_messages(chat_id, limit=limit, from_user='me' if only_me else None):
         try:
             await msg.delete(revoke=True)
             deleted += 1
-            await asyncio.sleep(0.1)
+            if deleted % 100 == 0:
+                await asyncio.sleep(2) # مکث ۲ ثانیه‌ای هر ۱۰۰ پیام برای جلوگیری از بن
+            else:
+                await asyncio.sleep(0.1)
+        except FloodWaitError as e:
+            await asyncio.sleep(e.seconds + 1)
         except: pass
-    c = await event.reply(f"🧹 {deleted} پاک شد.")
+    return deleted
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پاکسازی\s+([\d۰-۹]+)$'))
+async def clear_me_handler(event):
+    count = int(fa_to_en_digits(event.pattern_match.group(1)))
+    await event.delete()
+    d = await safe_clear(event.chat_id, count, only_me=True)
+    c = await event.reply(f"🧹 {d} پیام شما پاک شد.")
+    await asyncio.sleep(3)
+    await c.delete()
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پاکسازی همه\s+([\d۰-۹]+)$'))
+async def clear_all_handler(event):
+    count = int(fa_to_en_digits(event.pattern_match.group(1)))
+    await event.delete()
+    d = await safe_clear(event.chat_id, count, only_me=False)
+    c = await event.reply(f"🧹 {d} پیام (برای همه) پاک شد.")
     await asyncio.sleep(3)
     await c.delete()
 
@@ -300,7 +393,6 @@ async def anti_del_handler(event):
                     s_name = getattr(s, 'first_name', None) or "ناشناس"
                     s_user = f"@{s.username}" if s.username else "ندارد"
                     c_name = getattr(c, 'title', None) or "پیوی"
-                    c_user = f"@{c.username}" if hasattr(c, 'username') and c.username else "ندارد"
                     st = msg.date.astimezone(TEHRAN_TZ).strftime("%H:%M:%S")
                     dt = datetime.now(TEHRAN_TZ).strftime("%H:%M:%S")
                     rep = f"🗑 **حذف شد**\n\n👤 {s_name} (`{s.id}`)\n💬 {c_name}\n⏱ {st} -> {dt}\n\n📝 {msg.text or '[مدیا]'}"
@@ -340,7 +432,7 @@ async def schedule_loop():
                 except: pass
         await asyncio.sleep(20)
 
-# --- تگ ---
+# --- تگ (اصلاح شده با منشن واقعی) ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد تگ(?:\s+(.+))?$'))
 async def add_tag(event):
     arg = event.pattern_match.group(1)
