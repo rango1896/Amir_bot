@@ -9,7 +9,7 @@ from deep_translator import GoogleTranslator
 import core
 from core import client, fa_to_en_digits, save_db, TEHRAN_TZ
 
-# --- ویس به متن ---
+# --- متغیرهای این فایل ---
 try:
     from vosk import Model, KaldiRecognizer
     import soundfile as sf
@@ -18,14 +18,13 @@ try:
 except ImportError:
     VOSK_AVAILABLE = False
 
-# --- ماشین حساب (پشتیبانی از حروف فارسی) ---
+# --- ماشین حساب ---
 def parse_persian_math(text):
     mapping = {
         'صفر': '0', 'یک': '1', 'دو': '2', 'سه': '3', 'چهار': '4', 'پنج': '5',
         'شش': '6', 'شیش': '6', 'هفت': '7', 'هشت': '8', 'نه': '9', 'ده': '10',
         'بیست': '20', 'سی': '30', 'چهل': '40', 'پنجاه': '50', 'شصت': '60',
         'هفتاد': '70', 'هشتاد': '80', 'نود': '90', 'صد': '100', 'هزار': '1000',
-        'میلیون': '1000000',
         'جمع': '+', 'به‌علاوه': '+', 'به علاوه': '+', 'و': '+',
         'ضرب': '*', 'ضربدر': '*', 'در': '*',
         'تقسیم': '/', 'تقسیم‌بر': '/', 'تقسیم بر': '/', 'بخش': '/',
@@ -48,13 +47,11 @@ async def math_calc(event):
     expr = event.pattern_match.group(1)
     expr = parse_persian_math(expr)
     safe_expr = re.sub(r'[^0-9\+\-\*\/\(\)\.\s]', '', expr)
-    if not safe_expr:
-        return await event.reply("❗ عبارت نامعتبر است.")
+    if not safe_expr: return await event.reply("❗ عبارت نامعتبر است.")
     try:
         result = eval(safe_expr)
         await event.reply(f"🧮 نتیجه: `{result}`")
-    except:
-        await event.reply("❗ خطا در محاسبه.")
+    except: await event.reply("❗ خطا در محاسبه.")
 
 # --- وضعیت ربات ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^وضعیت$'))
@@ -69,59 +66,98 @@ async def status_handler(event):
         f"🔹 پوینت خودکار: {st(core.collect_points_active)}\n"
         f"🎣 ماهیگیری: {st(core.fishing_active)}\n"
         f"🏭 کارخونه: {st(core.factory_active)}\n"
+        f"🪄 واکنش خودکار: {st(True if core.auto_react_targets else False)}\n"
     )
     await event.reply(text)
 
-# --- هلپ (کامل و جامع) ---
+# --- واکنش خودکار ---
+@client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+(.+)\s+(\S+)$'))
+async def add_react(event):
+    target_str = event.pattern_match.group(1)
+    emoji = event.pattern_match.group(2)
+    if target_str in ["لیست", "حذف"]: return # جلوگیری از تداخل با دستورات لیست/حذف
+    try:
+        pid = int(target_str) if target_str.lstrip('-').isdigit() else utils.get_peer_id(await client.get_entity(target_str))
+        core.auto_react_targets[pid] = emoji
+        await save_db()
+        await event.reply(f"✅ واکنش {emoji} برای `{target_str}` تنظیم شد.")
+    except: await event.reply("❗ کاربر/کانال پیدا نشد.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(.+)$'))
+async def rem_react(event):
+    target_str = event.pattern_match.group(1)
+    try:
+        pid = int(target_str) if target_str.lstrip('-').isdigit() else utils.get_peer_id(await client.get_entity(target_str))
+        if pid in core.auto_react_targets:
+            del core.auto_react_targets[pid]
+            await save_db()
+            await event.reply(f"❌ واکنش برای `{target_str}` حذف شد.")
+        else: await event.reply("❗ در لیست نیست.")
+    except: await event.reply("❗ پیدا نشد.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^(لیست واکنش|واکنش لیست)$'))
+async def list_react(event):
+    if not core.auto_react_targets: return await event.reply("📋 لیست خالی است.")
+    t = "📋 **لیست واکنش‌ها:**\n\n" + "\n".join([f"▫️ `{i}`: {n}" for i, n in core.auto_react_targets.items()])
+    await event.reply(t)
+
+# --- هلپ (کاملا جامع و ریز) ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هلپ$'))
 async def help_handler(event):
     help_text = (
         "📖 **راهنمای جامع و کامل سلف‌بات** 🤖\n\n"
-        "━━━━━━━━━━━━━━━\n"
+        "سلام! تمام دستورات من به صورت دسته‌بندی شده در زیر آمده است. هر دستور دقیقاً همانطور که نوشته شده استفاده می‌شود.\n\n"
+        
         "🛠 **بخش اول: ابزارهای کاربردی**\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "🔹 **ترجمه کن** (با ریپلای) -> ترجمه متن به فارسی.\n\n"
-        "🔹 **اسپم [مدل] [تعداد] [تاخیر] [متن]** -> `اسپم 1 10 5 سلام`\n\n"
-        "🔹 **پاکسازی [تعداد]** -> پاک کردن پیام‌های خودتان.\n"
-        "🔹 **پاکسازی همه [تعداد]** -> پاک کردن پیام‌های همه (مخصوص ادمین‌ها).\n\n"
-        "🔹 **یادداشت [متن]** / **یادداشت بخوان [رمز]** / **یادداشت پاک [رمز]**\n"
-        "سیستم فلش مموری شخصی (رمز: amir1370).\n\n"
-        "🔹 **متن** (با ریپلای روی ویس) -> استخراج متن از ویس.\n\n"
-        "🔹 **محاسبه [عبارت]** -> ماشین حساب (عددی یا حروفی)\nمثال: `محاسبه دو ضربدر پنج` یا `محاسبه 10 + 20`\n\n"
-        "🔹 **وضعیت** -> مشاهده وضعیت روشن/خاموش بودن قابلیت‌ها.\n\n"
-        "━━━━━━━━━━━━━━━\n"
-        "🕵️ **بخش دوم: ابزارهای مانیتورینگ**\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "🔹 **ضد حذف روشن/خاموش** / **اد حذف [آیدی/ریپلای]** / **حذف اد**\n"
-        "ضبط پیام‌های پاک شده افراد.\n\n"
-        "🔹 **هشدار [کلمه]**\n"
-        "🔑 *کاربرد:* ثبت یک کلمه کلیدی. هر کسی در گروهی این کلمه را تایپ کرد، ربات فوراً پیام او را به همراه لینک مستقیم آن پیام برای شما در پیام‌های ذخیره شده ارسال می‌کند.\n"
-        "📝 *مثال:* `هشدار فری`\n\n"
-        "🔹 **حذف هشدار [کلمه]**\n"
-        "🔑 *کاربرد:* حذف کردن یک کلمه کلیدی خاص از لیست هشدارها.\n"
-        "📝 *مثال:* `حذف هشدار فری`\n\n"
-        "🔹 **هشدار خاموش**\n"
-        "🔑 *کاربرد:* خاموش کردن کل سیستم هشدار (کلمات پاک نمی‌شوند، فقط سیستم موقتاً غیرفعال می‌شود).\n\n"
-        "🔹 **لیست هشدار**\n"
-        "🔑 *کاربرد:* مشاهده تمام کلمات کلیدی که تا الان ثبت کرده‌اید.\n\n"
-        "🔹 **شبح روشن / شبح خاموش** -> مخفی ماندن آنلاین بودن و عدم خواندن پیام‌ها.\n\n"
-        "━━━━━━━━━━━━━━━\n"
-        "📌 **بخش سوم: ابزارهای منشن و تگ**\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "🔹 **اد تگ [آیدی/ریپلای] [اسم]** / **حذف تگ** / **لیست تگ**\n\n"
-        "🔹 **تگ همه** (با ریپلای/بدون ریپلای) -> تگ کردن همه افراد لیست.\n\n"
-        "🔹 **تگ [اسم]** -> تگ کردن یک شخص خاص با نوتیفیکیشن.\n\n"
-        "━━━━━━━━━━━━━━━\n"
-        "ℹ️ **بخش چهارم: اطلاعات و زمان‌بندی**\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "🔹 **اطلاعات** (ریپلای) -> دریافت مشخصات کاربر.\n\n"
-        "🔹 **زمان [ساعت] [متن]** -> `زمان 14:30 سلام`\n\n"
-        "━━━━━━━━━━━━━━━\n"
-        "🎮 **بخش پنجم: سیستم‌های بازی**\n"
-        "━━━━━━━━━━━━━━━\n\n"
-        "🔹 **پوینت روشن/خاموش** (هر ۱۰ دقیقه)\n"
-        "🔹 **ماهی روشن/خاموش** (هر ۳۰ دقیقه)\n"
-        "🔹 **کارخونه میویی روشن/خاموش** (هر ۱۳ ساعت و ۱۵ دقیقه)\n"
+        "🔹 **ترجمه کن** (با ریپلای) -> متن ریپلای شده را به فارسی ترجمه می‌کند.\n\n"
+        "🔹 **اسپم [مدل] [تعداد] [تاخیر] [متن]**\n"
+        "🔑 *مدل ۱:* ارسال تعداد پیام جداگانه. مثال: `اسپم 1 10 5 سلام` (۱۰ پیام با ۵ ثانیه فاصله)\n"
+        "🔑 *مدل ۲:* ارسال یک پیام حاوی تکرار متن. مثال: `اسپم 2 10 سلام` (یک پیام می‌فرستد که ۱۰ بار نوشته سلام)\n\n"
+        "🔹 **پاکسازی [تعداد]** -> پیام‌های خودتان را در چت برای همه پاک می‌کند.\n"
+        "🔹 **پاکسازی همه [تعداد]** -> پیام‌های همه اعضا را پاک می‌کند (فقط ادمین‌ها).\n\n"
+        "🔹 **یادداشت [متن]** -> ذخیره یک یادداشت شخصی.\n"
+        "🔹 **یادداشت بخوان [رمز]** -> نمایش یادداشت‌ها (رمز: amir1370)\n"
+        "🔹 **یادداشت پاک [رمز]** -> پاک کردن کل یادداشت‌ها.\n\n"
+        "🔹 **متن** (با ریپلای روی ویس) -> استخراج متن از ویس فارسی/خارجی.\n\n"
+        "🔹 **محاسبه [عبارت]** -> ماشین حساب با پشتیبانی از حروف فارسی.\n"
+        "📝 مثال: `محاسبه 10 + 20` یا `محاسبه دو ضربدر پنج`\n\n"
+        "🔹 **وضعیت** -> مشاهده اینکه کدام قابلیت‌های ربات روشن یا خاموش هستند.\n\n"
+
+        "🪄 **بخش دوم: واکنش خودکار**\n"
+        "🔹 **واکنش [آیدی/یوزرنیم] [ایموجی]**\n"
+        "🔑 *کاربرد:* به پیام‌های یک شخص یا کانال خاص، به صورت خودکار ایموجی می‌زند.\n"
+        "📝 مثال: `واکنش @hankhjc 🤣`\n\n"
+        "🔹 **حذف واکنش [آیدی/یوزرنیم]** -> حذف کردن شخص از لیست واکنش خودکار.\n"
+        "🔹 **لیست واکنش** یا **واکنش لیست** -> نمایش لیست افراد ثبت شده.\n\n"
+
+        "🕵️ **بخش سوم: مانیتورینگ و جاسوسی**\n"
+        "🔹 **ضد حذف روشن / ضد حذف خاموش** -> فعال/غیرفعال کردن سیستم.\n"
+        "🔹 **اد حذف [آیدی/ریپلای]** -> اضافه کردن شخص به لیست ضد حذف.\n"
+        "🔹 **حذف اد [آیدی/ریپلای]** -> حذف شخص از لیست.\n"
+        "🔹 **لیست اد حذف** -> مشاهده لیست.\n\n"
+        "🔹 **هشدار [کلمه]** -> ثبت کلمه کلیدی (اگر کسی نوشت، ربات به پیام ذخیره شده شما اطلاع می‌دهد).\n"
+        "🔹 **حذف هشدار [کلمه]** -> حذف کلمه از لیست.\n"
+        "🔹 **هشدار خاموش** -> خاموش کردن موقت سیستم هشدار.\n"
+        "🔹 **لیست هشدار** -> مشاهده کلمات ثبت شده.\n\n"
+        "🔹 **شبح روشن / شبح خاموش** -> مخفی ماندن آنلاین بودن و عدم خواندن پیام‌ها (تیک آبی).\n\n"
+
+        "📌 **بخش چهارم: منشن و تگ**\n"
+        "🔹 **اد تگ [آیدی/ریپلای] [اسم]** -> اضافه کردن شخص به لیست تگ.\n"
+        "🔹 **حذف تگ [آیدی/اسم/ریپلای]** -> حذف شخص از لیست.\n"
+        "🔹 **لیست تگ** -> مشاهده لیست.\n"
+        "🔹 **تگ همه** -> تگ کردن همه افراد لیست (با ریپلای روی پیام، تگ به آن پیام ریپلای می‌شود).\n"
+        "🔹 **تگ [اسم]** -> تگ کردن یک شخص خاص با نوتیفیکیشن (زنگ خوردن گوشی).\n\n"
+
+        "ℹ️ **بخش پنجم: اطلاعات و زمان‌بندی**\n"
+        "🔹 **اطلاعات [آیدی/ریپلای]** -> دریافت مشخصات کاربر (نام، آیدی، یوزرنیم، شماره).\n"
+        "🔹 **زمان [ساعت] [متن]** یا **زمان [آیدی] [ساعت] [متن]** -> ارسال زمان‌بندی شده پیام.\n"
+        "📝 مثال: `زمان 14:30 رسیدم`\n"
+        "🔹 **لیست زمان** -> مشاهده پیام‌های در انتظار ارسال.\n\n"
+
+        "🎮 **بخش ششم: سیستم‌های بازی**\n"
+        "🔹 **پوینت روشن / پوینت خاموش** -> جمع‌آوری خودکار پوینت (هر ۱۰ دقیقه).\n"
+        "🔹 **ماهی روشن / ماهی خاموش** -> سیستم ماهیگیری خودکار (هر ۳۰ دقیقه).\n"
+        "🔹 **کارخونه میویی روشن / کارخونه میویی خاموش** -> تولید و فروش خودکار (هر ۱۳ ساعت و ۱۵ دقیقه).\n"
     )
     await event.reply(help_text)
 
@@ -134,8 +170,7 @@ async def translate_reply(event):
     try:
         translated = GoogleTranslator(source='auto', target='fa').translate(replied_msg.text)
         await event.reply(f"🔸 ترجمه:\n{translated}")
-    except Exception as e:
-        await event.reply(f"❌ خطا: {e}")
+    except Exception as e: await event.reply(f"❌ خطا: {e}")
 
 # --- اسپم ---
 async def run_spam(model, count, text, chat_id, reply_to=None, delay=0.5):
@@ -171,19 +206,16 @@ async def spam_handler(event):
     await reply_msg.delete()
     asyncio.create_task(run_spam(model, count, text, event.chat_id, reply_to_id, delay))
 
-# --- پاکسازی پیشرفته (بدون محدودیت و ضد بن) ---
+# --- پاکسازی پیشرفته ---
 async def safe_clear(chat_id, limit, only_me=False):
     deleted = 0
     async for msg in client.iter_messages(chat_id, limit=limit, from_user='me' if only_me else None):
         try:
             await msg.delete(revoke=True)
             deleted += 1
-            if deleted % 100 == 0:
-                await asyncio.sleep(2) # مکث ۲ ثانیه‌ای هر ۱۰۰ پیام برای جلوگیری از بن
-            else:
-                await asyncio.sleep(0.1)
-        except FloodWaitError as e:
-            await asyncio.sleep(e.seconds + 1)
+            if deleted % 100 == 0: await asyncio.sleep(2)
+            else: await asyncio.sleep(0.1)
+        except FloodWaitError as e: await asyncio.sleep(e.seconds + 1)
         except: pass
     return deleted
 
@@ -242,7 +274,7 @@ async def setup_vosk():
             import zipfile
             with zipfile.ZipFile("model.zip", 'r') as z: z.extractall(".")
             os.remove("model.zip")
-        except Exception as e: return None
+        except: return None
     core.vosk_model = Model(model_path)
     return core.vosk_model
 
@@ -291,9 +323,8 @@ async def remove_alert(event):
     if kw in core.keywords_list:
         core.keywords_list.remove(kw)
         await save_db()
-        await event.reply(f"✅ کلمه `{kw}` از لیست هشدار حذف شد.")
-    else:
-        await event.reply(f"❌ کلمه `{kw}` در لیست هشدار وجود ندارد.")
+        await event.reply(f"✅ کلمه `{kw}` از لیست حذف شد.")
+    else: await event.reply("❗ در لیست نیست.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^لیست هشدار$'))
 async def list_alert(event):
@@ -302,27 +333,34 @@ async def list_alert(event):
     await event.reply(t)
 
 @client.on(events.NewMessage())
-async def alert_handler(event):
-    if not core.keyword_alert_active or not core.keywords_list: return
-    txt = event.message.text or ""
-    if not txt: return
-    for kw in core.keywords_list:
-        if kw in txt:
-            try:
-                s = await event.get_sender()
-                c = await event.get_chat()
-                s_name = getattr(s, 'first_name', None) or "ناشناس"
-                c_name = getattr(c, 'title', None) or "پیوی"
-                link = "ندارد"
-                if event.chat_id < 0:
-                    cid = str(event.chat_id)
-                    iid = cid[4:] if cid.startswith("-100") else cid[1:]
-                    link = f"https://t.me/c/{iid}/{event.id}"
-                elif hasattr(c, 'username') and c.username:
-                    link = f"https://t.me/{c.username}/{event.id}"
-                await client.send_message('me', f"🚨 **هشدار: `{kw}`**\n👤 {s_name}\n💬 {c_name}\n🔗 {link}\n\n📝 {txt}", link_preview=False)
-            except: pass
-            break
+async def alert_and_react_handler(event):
+    # هشدار کلمات
+    if core.keyword_alert_active and core.keywords_list:
+        txt = event.message.text or ""
+        if txt:
+            for kw in core.keywords_list:
+                if kw in txt:
+                    try:
+                        s = await event.get_sender()
+                        c = await event.get_chat()
+                        s_name = getattr(s, 'first_name', None) or "ناشناس"
+                        c_name = getattr(c, 'title', None) or "پیوی"
+                        link = "ندارد"
+                        if event.chat_id < 0:
+                            cid = str(event.chat_id)
+                            iid = cid[4:] if cid.startswith("-100") else cid[1:]
+                            link = f"https://t.me/c/{iid}/{event.id}"
+                        elif hasattr(c, 'username') and c.username:
+                            link = f"https://t.me/{c.username}/{event.id}"
+                        await client.send_message('me', f"🚨 **هشدار: `{kw}`**\n👤 {s_name}\n💬 {c_name}\n🔗 {link}\n\n📝 {txt}", link_preview=False)
+                    except: pass
+                    break
+    
+    # واکنش خودکار
+    if core.auto_react_targets and event.sender_id in core.auto_react_targets:
+        try:
+            await event.message.react(core.auto_react_targets[event.sender_id])
+        except: pass
 
 # --- حالت شبح ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^شبح (روشن|خاموش)$'))
@@ -409,7 +447,6 @@ async def anti_del_handler(event):
                     s = await msg.get_sender()
                     c = await msg.get_chat()
                     s_name = getattr(s, 'first_name', None) or "ناشناس"
-                    s_user = f"@{s.username}" if s.username else "ندارد"
                     c_name = getattr(c, 'title', None) or "پیوی"
                     st = msg.date.astimezone(TEHRAN_TZ).strftime("%H:%M:%S")
                     dt = datetime.now(TEHRAN_TZ).strftime("%H:%M:%S")
@@ -450,7 +487,7 @@ async def schedule_loop():
                 except: pass
         await asyncio.sleep(20)
 
-# --- تگ (اصلاح شده با منشن واقعی) ---
+# --- تگ ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد تگ(?:\s+(.+))?$'))
 async def add_tag(event):
     arg = event.pattern_match.group(1)
