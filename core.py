@@ -60,7 +60,7 @@ def strip_clock(name):
             return parts[0]
     return name
 
-# === توابع دیتابیس تلگرامی (ساده‌سازی شده برای رندر) ===
+# === توابع دیتابیس تلگرامی ===
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list
     async for msg in client.iter_messages('me', limit=50):
