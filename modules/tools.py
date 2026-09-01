@@ -70,24 +70,48 @@ async def status_handler(event):
     )
     await event.reply(text)
 
-# --- واکنش خودکار ---
+# --- واکنش خودکار (اصلاح شده برای لینک‌ها و کانال‌ها) ---
+def extract_username_from_url(text):
+    if "t.me/" in text:
+        parts = text.split("t.me/")[-1].split("/")
+        return parts[0] if parts[0] else text
+    return text
+
 @client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+(.+)\s+(\S+)$'))
 async def add_react(event):
-    target_str = event.pattern_match.group(1)
-    emoji = event.pattern_match.group(2)
+    target_str = event.pattern_match.group(1).strip()
+    emoji = event.pattern_match.group(2).strip()
     if target_str in ["لیست", "حذف"]: return
     try:
-        pid = int(target_str) if target_str.lstrip('-').isdigit() else utils.get_peer_id(await client.get_entity(target_str))
+        if target_str.lstrip('-').isdigit():
+            pid = int(target_str)
+            ent = await client.get_entity(pid)
+            pid = utils.get_peer_id(ent)
+        else:
+            clean_target = extract_username_from_url(target_str)
+            ent = await client.get_entity(clean_target)
+            pid = utils.get_peer_id(ent)
+            
         core.auto_react_targets[pid] = emoji
         await save_db()
-        await event.reply(f"✅ واکنش {emoji} برای `{target_str}` تنظیم شد.")
-    except: await event.reply("❗ کاربر/کانال پیدا نشد.")
+        await event.reply(f"✅ واکنش {emoji} برای `{target_str}` تنظیم شد (ID: {pid}).")
+    except Exception as e:
+        print(f"خطا در تنظیم واکنش: {e}")
+        await event.reply("❗ کاربر/کانال پیدا نشد. مطمئن شو لینک یا آیدی درسته.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(.+)$'))
 async def rem_react(event):
-    target_str = event.pattern_match.group(1)
+    target_str = event.pattern_match.group(1).strip()
     try:
-        pid = int(target_str) if target_str.lstrip('-').isdigit() else utils.get_peer_id(await client.get_entity(target_str))
+        if target_str.lstrip('-').isdigit():
+            pid = int(target_str)
+            ent = await client.get_entity(pid)
+            pid = utils.get_peer_id(ent)
+        else:
+            clean_target = extract_username_from_url(target_str)
+            ent = await client.get_entity(clean_target)
+            pid = utils.get_peer_id(ent)
+
         if pid in core.auto_react_targets:
             del core.auto_react_targets[pid]
             await save_db()
@@ -356,13 +380,13 @@ async def alert_and_react_handler(event):
                     except: pass
                     break
     
-    # واکنش خودکار (با استفاده از chat_id که برای کانال و گروه درست کار میکنه)
+    # واکنش خودکار (با chat_id)
     if core.auto_react_targets and event.chat_id in core.auto_react_targets:
         try:
             emoji = core.auto_react_targets[event.chat_id]
             await event.message.react(emoji)
         except Exception as e:
-            print(f"خطا در واکنش خودکار: {e}")
+            print(f"خطا در واکنش خودکار (Chat: {event.chat_id}, Emoji: {emoji}): {e}")
 
 # --- حالت شبح ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^شبح (روشن|خاموش)$'))
