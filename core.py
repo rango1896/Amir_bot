@@ -61,9 +61,9 @@ def strip_clock(name):
             return parts[0]
     return name
 
-# === توابع دیتابیس تلگرامی ===
+# === توابع دیتابیس تلگرامی (اصلاح شده) ===
 async def load_db():
-    global anti_delete_targets, tag_targets, notes_list, keywords_list
+    global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
     async for msg in client.iter_messages('me', limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
             try:
@@ -74,6 +74,7 @@ async def load_db():
                     tag_targets = {int(k): v for k, v in data.get("tags", {}).items()}
                     notes_list = data.get("notes", [])
                     keywords_list = set(data.get("keywords", []))
+                    auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
                     print("✅ دیتابیس از تلگرام بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
@@ -84,7 +85,8 @@ async def save_db():
         "anti_delete": {str(k): v for k, v in anti_delete_targets.items()},
         "tags": {str(k): v for k, v in tag_targets.items()},
         "notes": notes_list,
-        "keywords": list(keywords_list)
+        "keywords": list(keywords_list),
+        "reactions": {str(k): v for k, v in auto_react_targets.items()}
     }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_TAG} {json_str}"
