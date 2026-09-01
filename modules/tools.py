@@ -75,7 +75,7 @@ async def status_handler(event):
 async def add_react(event):
     target_str = event.pattern_match.group(1)
     emoji = event.pattern_match.group(2)
-    if target_str in ["لیست", "حذف"]: return # جلوگیری از تداخل با دستورات لیست/حذف
+    if target_str in ["لیست", "حذف"]: return
     try:
         pid = int(target_str) if target_str.lstrip('-').isdigit() else utils.get_peer_id(await client.get_entity(target_str))
         core.auto_react_targets[pid] = emoji
@@ -124,10 +124,10 @@ async def help_handler(event):
         "🔹 **وضعیت** -> مشاهده اینکه کدام قابلیت‌های ربات روشن یا خاموش هستند.\n\n"
 
         "🪄 **بخش دوم: واکنش خودکار**\n"
-        "🔹 **واکنش [آیدی/یوزرنیم] [ایموجی]**\n"
+        "🔹 **واکنش [آیدی/یوزرنیم/لینک] [ایموجی]**\n"
         "🔑 *کاربرد:* به پیام‌های یک شخص یا کانال خاص، به صورت خودکار ایموجی می‌زند.\n"
-        "📝 مثال: `واکنش @hankhjc 🤣`\n\n"
-        "🔹 **حذف واکنش [آیدی/یوزرنیم]** -> حذف کردن شخص از لیست واکنش خودکار.\n"
+        "📝 مثال: `واکنش https://t.me/TweetyChannel 🤣`\n\n"
+        "🔹 **حذف واکنش [آیدی/یوزرنیم/لینک]** -> حذف کردن شخص از لیست واکنش خودکار.\n"
         "🔹 **لیست واکنش** یا **واکنش لیست** -> نمایش لیست افراد ثبت شده.\n\n"
 
         "🕵️ **بخش سوم: مانیتورینگ و جاسوسی**\n"
@@ -356,11 +356,13 @@ async def alert_and_react_handler(event):
                     except: pass
                     break
     
-    # واکنش خودکار
-    if core.auto_react_targets and event.sender_id in core.auto_react_targets:
+    # واکنش خودکار (با استفاده از chat_id که برای کانال و گروه درست کار میکنه)
+    if core.auto_react_targets and event.chat_id in core.auto_react_targets:
         try:
-            await event.message.react(core.auto_react_targets[event.sender_id])
-        except: pass
+            emoji = core.auto_react_targets[event.chat_id]
+            await event.message.react(emoji)
+        except Exception as e:
+            print(f"خطا در واکنش خودکار: {e}")
 
 # --- حالت شبح ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^شبح (روشن|خاموش)$'))
