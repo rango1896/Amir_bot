@@ -5,7 +5,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from telethon import TelegramClient, events, utils
 from telethon.tl.functions.account import UpdateProfileRequest
-from deep_translator import GoogleTranslator
 
 API_ID = 17349
 API_HASH = "344583e45741c457fe1862106095a5eb"
@@ -30,7 +29,7 @@ keywords_list = set()
 ghost_mode_active = False
 tag_targets = {}
 notes_list = []
-auto_react_targets = {} # متغیر جدید برای واکنش خودکار
+auto_react_targets = {}
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
@@ -61,7 +60,7 @@ def strip_clock(name):
             return parts[0]
     return name
 
-# === توابع دیتابیس تلگرامی (اصلاح شده) ===
+# === توابع دیتابیس تلگرامی ===
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
     async for msg in client.iter_messages('me', limit=50):
