@@ -30,6 +30,7 @@ keywords_list = set()
 ghost_mode_active = False
 tag_targets = {}
 notes_list = []
+auto_react_targets = {} # متغیر جدید برای واکنش خودکار
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
