@@ -1,12 +1,12 @@
 import asyncio
+import sys
+import os
 import core
 from flask import Flask
 import threading
-import sys
-import os
 
-# اضافه کردن مسیر فعلی به پایتون برای پیدا کردن پوشه‌ها
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# اضافه کردن مسیر فعلی به پایتون (این خط مشکل رو ۱۰۰٪ حل میکنه)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # لود کردن تمام ماژول‌ها
 from modules.games import factory, fishing, cats
