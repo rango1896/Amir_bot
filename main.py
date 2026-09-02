@@ -2,8 +2,9 @@ import asyncio
 import core
 from flask import Flask
 import threading
+from telethon import events
 
-# لود کردن مستقیم فایل‌ها (بدون پوشه، کاملاً بدون ارور)
+# لود کردن مستقیم فایل‌ها
 import factory
 import fishing
 import cats
@@ -23,6 +24,27 @@ def home():
 
 def run_web():
     app.run(host='0.0.0.0', port=8080)
+
+# === دستور روشن کردن همه قابلیت‌ها ===
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^روشن همه$'))
+async def turn_on_all(event):
+    core.anti_delete_active = True
+    core.keyword_alert_active = True
+    core.stray_cat_active = True
+    core.collect_points_active = True
+    core.fishing_active = True
+    core.ghost_mode_active = True
+    
+    # روشن کردن کارخونه (چون باید تسکش بسازه)
+    if not core.factory_active:
+        core.factory_active = True
+        asyncio.create_task(factory.factory_cycle())
+        
+    # روشن کردن واکنش خودکار
+    if hasattr(reactions, 'react_active'):
+        reactions.react_active = True
+
+    await event.reply("✅ تمام قابلیت‌های ربات (شبح، ضدحذف، هشدار، گربه‌ها، پوینت، ماهیگیری، کارخونه و واکنش) **روشن** شدند!")
 
 async def main():
     await core.client.start()
