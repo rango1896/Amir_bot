@@ -4,17 +4,27 @@ from telethon.tl.types import ReactionEmoji
 import core
 from core import client, save_db
 
+react_active = True # متغیر برای روشن و خاموش بودن
+
 def extract_username_from_url(text):
     if "t.me/" in text:
         parts = text.split("t.me/")[-1].split("/")
         return parts[0] if parts[0] else text
     return text
 
+@client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش (روشن|خاموش)$'))
+async def react_toggle(event):
+    global react_active
+    status = event.pattern_match.group(1)
+    react_active = True if status == "روشن" else False
+    await event.reply(f"🪄 سیستم واکنش خودکار **{status}** شد.")
+
 @client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+(.+)\s+(\S+)$'))
 async def add_react(event):
+    global react_active
     target_str = event.pattern_match.group(1).strip()
     emoji = event.pattern_match.group(2).strip()
-    if target_str in ["لیست", "حذف"]: return
+    if target_str in ["لیست", "حذف", "روشن", "خاموش"]: return
     try:
         if target_str.lstrip('-').isdigit():
             pid = int(target_str)
@@ -26,6 +36,7 @@ async def add_react(event):
             pid = utils.get_peer_id(ent)
             
         core.auto_react_targets[pid] = emoji
+        react_active = True # وقتی آیدی اضافه میکنی خودکار روشن میشه
         await save_db()
         await event.reply(f"✅ واکنش {emoji} برای `{target_str}` تنظیم شد.")
     except Exception as e:
@@ -60,7 +71,7 @@ async def list_react(event):
 
 @client.on(events.NewMessage())
 async def auto_react_handler(event):
-    if core.auto_react_targets and event.chat_id in core.auto_react_targets:
+    if react_active and core.auto_react_targets and event.chat_id in core.auto_react_targets:
         try:
             emoji_str = core.auto_react_targets[event.chat_id]
             reaction = ReactionEmoji(emoticon=emoji_str)
