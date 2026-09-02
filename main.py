@@ -5,10 +5,10 @@ import core
 from flask import Flask
 import threading
 
-# اضافه کردن مسیر فعلی به پایتون (این خط مشکل رو ۱۰۰٪ حل میکنه)
+# اضافه کردن مسیر فعلی به پایتون
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# لود کردن تمام ماژول‌ها
+# لود کردن تمام ماژول‌ها از پوشه‌ها
 from modules.games import factory, fishing, cats
 from modules.security import anti_delete, alerts
 from modules.mentions import tags, user_info
