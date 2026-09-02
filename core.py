@@ -20,6 +20,7 @@ stray_cat_active = True
 factory_active = False
 
 DB_TAG = "#DB_AMIR"
+DB_CHAT = "hankhhh" # اسم گروهی که دیتابیس توش ذخیره میشه
 anti_delete_active = False
 anti_delete_targets = {}
 message_cache = {}
@@ -60,12 +61,12 @@ def strip_clock(name):
             return parts[0]
     return name
 
-# === توابع دیتابیس تلگرامی ===
+# === توابع دیتابیس تلگرامی (ذخیره در گروه hankhhh) ===
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    async for msg in client.iter_messages('me', limit=50):
-        if msg.text and msg.text.startswith(DB_TAG):
-            try:
+    try:
+        async for msg in client.iter_messages(DB_CHAT, limit=50):
+            if msg.text and msg.text.startswith(DB_TAG):
                 json_str = msg.text.replace(DB_TAG, "").strip()
                 if json_str:
                     data = json.loads(json_str)
@@ -74,10 +75,10 @@ async def load_db():
                     notes_list = data.get("notes", [])
                     keywords_list = set(data.get("keywords", []))
                     auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
-                    print("✅ دیتابیس از تلگرام بارگذاری شد.")
-            except Exception as e:
-                print(f"❌ خطا در خواندن دیتابیس: {e}")
-            return
+                    print("✅ دیتابیس از گروه بارگذاری شد.")
+                break
+    except Exception as e:
+        print(f"❌ خطا در خواندن دیتابیس (مطمئن شو عضو گروه {DB_CHAT} هستی): {e}")
 
 async def save_db():
     data = {
@@ -94,15 +95,15 @@ async def save_db():
         text_to_save = text_to_save[:4000]
     
     found_msg = None
-    async for msg in client.iter_messages('me', limit=50):
-        if msg.text and msg.text.startswith(DB_TAG):
-            found_msg = msg
-            break
-            
     try:
+        async for msg in client.iter_messages(DB_CHAT, limit=50):
+            if msg.text and msg.text.startswith(DB_TAG):
+                found_msg = msg
+                break
+            
         if found_msg:
             await found_msg.edit(text_to_save, link_preview=False)
         else:
-            await client.send_message('me', text_to_save, link_preview=False)
+            await client.send_message(DB_CHAT, text_to_save, link_preview=False)
     except Exception as e:
-        print(f"❌ خطا در ذخیره دیتابیس: {e}")
+        print(f"❌ خطا در ذخیره دیتابیس تو گروه: {e}")
