@@ -5,7 +5,7 @@ import core
 from core import client
 
 PIOU_GROUP = -1004346927517
-PIOU_TARGET = "cbjyz"
+TARGET_MSG_ID = 18  # آیدی پیامی که قراره روش ریپلای بشه (از لینک شما استخراج شد)
 piou_active = False
 last_meat_time = 0
 
@@ -36,34 +36,20 @@ async def piou_main_loop():
     while True:
         if piou_active:
             try:
-                # پیدا کردن آخرین پیام یارو با استفاده از جستجوی سرور تلگرام
-                # این روش حتی اگه ۱۰۰ هزار پیام تو گروه باشه، در کسری از ثانیه پیداش میکنه
-                target_msg = await client.get_messages(PIOU_GROUP, from_user=PIOU_TARGET, limit=1)
-                
-                if not target_msg:
-                    print("⚠️ پیام کاربر تو گروه پیدا نشد (شاید هنوز هیچ پیامی نداده).")
-                    await asyncio.sleep(10)
-                    continue
-
                 cycle_count = 0
                 while piou_active:
                     cycle_count += 1
                     
-                    # بروزرسانی آخرین پیام یارو (اگه تو این مدت پیام جدیدی داده، روی پیام جدیدش شلیک کنه)
-                    latest_msg = await client.get_messages(PIOU_GROUP, from_user=PIOU_TARGET, limit=1)
-                    if latest_msg:
-                        target_msg = latest_msg
-                    
-                    # ۱. شلیک (ریپلای روی پیام یارو)
-                    shalak_msg = await client.send_message(PIOU_GROUP, "شلیک", reply_to=target_msg.id)
+                    # ۱. شلیک (ریپلای مستقیم روی پیام شماره ۱۸)
+                    shalak_msg = await client.send_message(PIOU_GROUP, "شلیک", reply_to=TARGET_MSG_ID)
                     await asyncio.sleep(2)
                     
-                    # ۲. پیو هیل (ریپلای روی پیام یارو)
-                    await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=target_msg.id)
+                    # ۲. پیو هیل (ریپلای مستقیم روی پیام شماره ۱۸)
+                    await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
                     
                     # ۳. خرید مهمات (هر ۹ بار)
                     if cycle_count % 9 == 0:
-                        await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=target_msg.id)
+                        await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=TARGET_MSG_ID)
                     
                     # ۴. استراحت ۴.۵ دقیقه (هر ۱۰ بار)
                     if cycle_count % 10 == 0:
