@@ -21,17 +21,24 @@ async def meat_loop():
                 print(f"خطا گوشت: {e}")
         await asyncio.sleep(5)
 
-# --- لوپ شلیک کور (هر ۵ دقیقه) ---
+# --- لوپ شلیک کور (درجا + هر ۵ دقیقه) ---
 async def blind_shot_loop():
     while True:
         if piou_active:
             try:
+                # ۱. درجا شلیک بدون ریپلای میکنه
                 await client.send_message(PIOU_GROUP, "شلیک")
             except Exception as e:
                 print(f"خطا شلیک کور: {e}")
-        await asyncio.sleep(300)
+            
+            # ۲. بعدش ۵ دقیقه صبر میکنه (اگه وسطش خاموش کردی از حلقه میاد بیرون)
+            for _ in range(300):
+                if not piou_active: break
+                await asyncio.sleep(1)
+        else:
+            await asyncio.sleep(5)
 
-# --- لوپ اصلی شلیک و پیو هیل ---
+# --- لوپ اصلی شلیک و پیو هیل (با ریپلای) ---
 async def piou_main_loop():
     while True:
         if piou_active:
@@ -47,7 +54,7 @@ async def piou_main_loop():
                     # ۲. پیو هیل (ریپلای مستقیم روی پیام شماره ۱۸)
                     await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
                     
-                    # ۳. خرید مهمات (هر ۹ بار)
+                    # ۳. خرید مهمات (هر ۹ بار شلیک با ریپلای)
                     if cycle_count % 9 == 0:
                         await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=TARGET_MSG_ID)
                     
