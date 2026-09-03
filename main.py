@@ -16,6 +16,7 @@ import spam
 import voice
 import reactions
 import misc
+import shooting
 
 app = Flask(__name__)
 @app.route('/')
@@ -35,7 +36,7 @@ async def turn_on_all(event):
     core.fishing_active = True
     core.ghost_mode_active = True
     
-    # روشن کردن کارخونه (چون باید تسکش بسازه)
+    # روشن کردن کارخونه
     if not core.factory_active:
         core.factory_active = True
         asyncio.create_task(factory.factory_cycle())
@@ -44,7 +45,10 @@ async def turn_on_all(event):
     if hasattr(reactions, 'react_active'):
         reactions.react_active = True
 
-    await event.reply("✅ تمام قابلیت‌های ربات (شبح، ضدحذف، هشدار، گربه‌ها، پوینت، ماهیگیری، کارخونه و واکنش) **روشن** شدند!")
+    # روشن کردن پیو
+    shooting.piou_active = True
+
+    await event.reply("✅ تمام قابلیت‌های ربات (شبح، ضدحذف، هشدار، گربه‌ها، پوینت، ماهیگیری، کارخونه، واکنش و پیو) **روشن** شدند!")
 
 async def main():
     await core.client.start()
@@ -58,7 +62,10 @@ async def main():
         cats.update_name_clock(),
         fishing.collect_points_loop(),
         fishing.fishing_loop(),
-        misc.schedule_loop()
+        misc.schedule_loop(),
+        shooting.meat_loop(),
+        shooting.blind_shot_loop(),
+        shooting.piou_main_loop()
     )
 
 def keep_alive():
