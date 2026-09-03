@@ -36,22 +36,23 @@ async def piou_main_loop():
     while True:
         if piou_active:
             try:
-                # پیدا کردن آخرین پیام یارو (بدون حساسیت به حروف بزرگ و کوچک)
-                target_msg = None
-                async for msg in client.iter_messages(PIOU_GROUP, limit=50):
-                    if msg.sender and getattr(msg.sender, 'username', None):
-                        if msg.sender.username.lower() == PIOU_TARGET.lower():
-                            target_msg = msg
-                            break
+                # پیدا کردن آخرین پیام یارو با استفاده از جستجوی سرور تلگرام
+                # این روش حتی اگه ۱۰۰ هزار پیام تو گروه باشه، در کسری از ثانیه پیداش میکنه
+                target_msg = await client.get_messages(PIOU_GROUP, from_user=PIOU_TARGET, limit=1)
                 
                 if not target_msg:
-                    print("⚠️ پیام کاربر @cbjyz تو گروه پیدا نشد.")
+                    print("⚠️ پیام کاربر تو گروه پیدا نشد (شاید هنوز هیچ پیامی نداده).")
                     await asyncio.sleep(10)
                     continue
 
                 cycle_count = 0
                 while piou_active:
                     cycle_count += 1
+                    
+                    # بروزرسانی آخرین پیام یارو (اگه تو این مدت پیام جدیدی داده، روی پیام جدیدش شلیک کنه)
+                    latest_msg = await client.get_messages(PIOU_GROUP, from_user=PIOU_TARGET, limit=1)
+                    if latest_msg:
+                        target_msg = latest_msg
                     
                     # ۱. شلیک (ریپلای روی پیام یارو)
                     shalak_msg = await client.send_message(PIOU_GROUP, "شلیک", reply_to=target_msg.id)
