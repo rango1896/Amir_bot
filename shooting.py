@@ -1,4 +1,5 @@
 import asyncio
+import time
 from telethon import events
 import core
 from core import client
@@ -6,16 +7,20 @@ from core import client
 PIOU_GROUP = -1004346927517
 PIOU_TARGET = "cbjyz"
 piou_active = False
+last_meat_time = 0
 
 # --- لوپ ارسال گوشت (هر ۳۰ دقیقه) ---
 async def meat_loop():
+    global last_meat_time
     while True:
-        if piou_active:
+        # اگه پیو روشنه و از آخرین بار گذشتن گوشت ۳۰ دقیقه گذشته (یا اول باره که last_meat_time=0 است)
+        if piou_active and (time.time() - last_meat_time >= 1800):
             try:
                 await client.send_message(PIOU_GROUP, "🥩")
+                last_meat_time = time.time() # ثبت زمان دقیق ارسال
             except Exception as e:
                 print(f"خطا گوشت: {e}")
-        await asyncio.sleep(1800)
+        await asyncio.sleep(5)
 
 # --- لوپ شلیک کور (هر ۵ دقیقه) ---
 async def blind_shot_loop():
@@ -52,7 +57,7 @@ async def piou_main_loop():
                     shalak_msg = await client.send_message(PIOU_GROUP, "شلیک", reply_to=target_msg.id)
                     await asyncio.sleep(2)
                     
-                    # ۲. پیو هیل (الان دقیقاً روی پیام همون یارو ریپلای میشه)
+                    # ۲. پیو هیل (ریپلای روی پیام یارو)
                     await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=target_msg.id)
                     
                     # ۳. خرید مهمات (هر ۹ بار)
@@ -81,9 +86,11 @@ async def piou_main_loop():
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$'))
 async def piou_on(event):
-    global piou_active
-    piou_active = True
-    await event.reply("🔫 سیستم پیو **روشن** شد.")
+    global piou_active, last_meat_time
+    if not piou_active:
+        piou_active = True
+        last_meat_time = 0  # این خط باعث میشه ربات درجا گوشت رو بفرسته و ۳۰ دقیقه بعد دوباره بفرسته
+        await event.reply("🔫 سیستم پیو **روشن** شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$'))
 async def piou_off(event):
