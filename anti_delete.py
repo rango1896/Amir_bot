@@ -85,7 +85,31 @@ async def anti_del_handler(event):
                     c_name = getattr(c, 'title', None) or "پیوی"
                     st = msg.date.astimezone(TEHRAN_TZ).strftime("%H:%M:%S")
                     dt = datetime.now(TEHRAN_TZ).strftime("%H:%M:%S")
-                    rep = f"🗑 **حذف شد**\n\n👤 {s_name} (`{s.id}`)\n💬 {c_name}\n⏱ {st} -> {dt}\n\n📝 {msg.text or '[مدیا]'}"
+                    
+                    # === بررسی اینکه آیا پیام پاک شده، خودش ریپلای به پیام دیگه‌ای بوده یا نه ===
+                    reply_link_text = ""
+                    if msg.reply_to_msg_id:
+                        replied_msg_id = msg.reply_to_msg_id
+                        replied_link = "ندارد"
+                        if c_id < 0:
+                            cid = str(c_id)
+                            iid = cid[4:] if cid.startswith("-100") else cid[1:]
+                            replied_link = f"https://t.me/c/{iid}/{replied_msg_id}"
+                        elif hasattr(c, 'username') and c.username:
+                            replied_link = f"https://t.me/{c.username}/{replied_msg_id}"
+                            
+                        # پیدا کردن اسم کسی که پیام اصلی رو داده
+                        replied_sender_name = "ناشناس"
+                        try:
+                            replied_msg = await client.get_messages(c_id, ids=replied_msg_id)
+                            if replied_msg:
+                                r_sender = await replied_msg.get_sender()
+                                replied_sender_name = getattr(r_sender, 'first_name', None) or "ناشناس"
+                        except: pass
+                        
+                        reply_link_text = f"\n💬 **این پیام ریپلای شده بود به:** {replied_sender_name}\n🔗 **لینک پیام اصلی:** {replied_link}"
+
+                    rep = f"🗑 **حذف شد**\n\n👤 {s_name} (`{s.id}`)\n💬 {c_name}\n⏱ {st} -> {dt}{reply_link_text}\n\n📝 {msg.text or '[مدیا]'}"
                     if msg.media:
                         try:
                             sm = await client.send_file('me', msg.media)
