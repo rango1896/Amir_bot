@@ -8,6 +8,7 @@ import shooting
 PIOU_GROUP = -1004346927517
 TARGET_MSG_ID = 18
 smart_active = False
+refill_active = True
 current_task = None
 death_seconds = 0
 refill_seconds = 0
@@ -29,9 +30,21 @@ async def smart_off(event):
         current_task.cancel()
     await event.reply("🛑 سیستم شلیک هوشمند **خاموش** شد.")
 
+@client.on(events.NewMessage(outgoing=True, pattern=r'^بانداژ روشن$'))
+async def refill_on(event):
+    global refill_active
+    refill_active = True
+    await event.reply("🩹 سیستم بانداژ **روشن** شد.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^بانداژ خاموش$'))
+async def refill_off(event):
+    global refill_active
+    refill_active = False
+    await event.reply("🛑 سیستم بانداژ **خاموش** شد.")
+
 @client.on(events.NewMessage(incoming=True))
 async def game_listener(event):
-    global smart_active, death_seconds, refill_seconds, current_task
+    global smart_active, death_seconds, refill_seconds, current_task, refill_active
     if not smart_active or event.chat_id != PIOU_GROUP: return
     
     text = event.message.text or ""
@@ -51,7 +64,7 @@ async def game_listener(event):
             current_task = asyncio.create_task(death_cycle_task())
 
     # ۲. تشخیص پیام تموم شدن بانداژها
-    elif "جعبه‌های کمک اولیه‌ات تموم شده" in text and "تا" in text:
+    elif refill_active and "جعبه‌های کمک اولیه‌ات تموم شده" in text and "تا" in text:
         seconds = 0
         match_min = re.search(r'تا\s+(\d+)\s*دقیق', text)
         match_sec = re.search(r'تا\s+(\d+)\s*ثانی', text)
@@ -65,7 +78,7 @@ async def game_listener(event):
             current_task = asyncio.create_task(refill_cycle_task())
 
 async def wait_for_events():
-    pass # این فقط برای نگه داشتن ربات در حالت آماده‌باش است
+    pass
 
 async def death_cycle_task():
     try:
@@ -111,13 +124,20 @@ async def refill_cycle_task():
         
         if not smart_active: return
         
-        print("🔫 شلیک ۱۰ تایی پس از پر شدن بانداژها...")
-        for _ in range(10):
+        # چرخه بی‌نهایت: ۱۰ شلیک + ۶ دقیقه استراحت
+        while smart_active:
+            print("🔫 شلیک ۱۰ تایی...")
+            for _ in range(10):
+                if not smart_active: return
+                await client.send_message(PIOU_GROUP, "شلیک", reply_to=TARGET_MSG_ID)
+                await asyncio.sleep(2)
+                await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
+                await asyncio.sleep(16)
+            
             if not smart_active: return
-            await client.send_message(PIOU_GROUP, "شلیک", reply_to=TARGET_MSG_ID)
-            await asyncio.sleep(2)
-            await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
-            await asyncio.sleep(16)
+            
+            print("⏳ ۶ دقیقه استراحت (چرخه بانداژ)...")
+            await asyncio.sleep(360)
             
     except asyncio.CancelledError:
         print("🔄 چرخه پر شدن بانداژ لغو شد!")
