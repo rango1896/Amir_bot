@@ -52,8 +52,8 @@ async def piou_main_loop():
                     shalak_msg = await client.send_message(PIOU_GROUP, "شلیک", reply_to=target_msg.id)
                     await asyncio.sleep(2)
                     
-                    # ۲. پیو هیل (ریپلای روی پیام شلیک خودمون)
-                    await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=shalak_msg.id)
+                    # ۲. پیو هیل (الان دقیقاً روی پیام همون یارو ریپلای میشه)
+                    await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=target_msg.id)
                     
                     # ۳. خرید مهمات (هر ۹ بار)
                     if cycle_count % 9 == 0:
