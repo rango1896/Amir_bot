@@ -17,7 +17,7 @@ import voice
 import reactions
 import misc
 import shooting
-
+import smart_shoot
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -35,7 +35,7 @@ async def turn_on_all(event):
     core.collect_points_active = True
     core.fishing_active = True
     core.ghost_mode_active = True
-    
+    smart_shoot.smart_active = True
     # روشن کردن کارخونه
     if not core.factory_active:
         core.factory_active = True
