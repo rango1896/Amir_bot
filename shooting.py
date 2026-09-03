@@ -9,15 +9,14 @@ PIOU_TARGET = "cbjyz"
 piou_active = False
 last_meat_time = 0
 
-# --- لوپ ارسال گوشت (هر ۳۰ دقیقه) ---
+# --- لوپ ارسال گوشت (درجا + هر ۳۰ دقیقه) ---
 async def meat_loop():
     global last_meat_time
     while True:
-        # اگه پیو روشنه و از آخرین بار گذشتن گوشت ۳۰ دقیقه گذشته (یا اول باره که last_meat_time=0 است)
         if piou_active and (time.time() - last_meat_time >= 1800):
             try:
                 await client.send_message(PIOU_GROUP, "🥩")
-                last_meat_time = time.time() # ثبت زمان دقیق ارسال
+                last_meat_time = time.time()
             except Exception as e:
                 print(f"خطا گوشت: {e}")
         await asyncio.sleep(5)
@@ -37,12 +36,13 @@ async def piou_main_loop():
     while True:
         if piou_active:
             try:
-                # پیدا کردن آخرین پیام یارو
+                # پیدا کردن آخرین پیام یارو (بدون حساسیت به حروف بزرگ و کوچک)
                 target_msg = None
                 async for msg in client.iter_messages(PIOU_GROUP, limit=50):
-                    if msg.sender and getattr(msg.sender, 'username', None) == PIOU_TARGET:
-                        target_msg = msg
-                        break
+                    if msg.sender and getattr(msg.sender, 'username', None):
+                        if msg.sender.username.lower() == PIOU_TARGET.lower():
+                            target_msg = msg
+                            break
                 
                 if not target_msg:
                     print("⚠️ پیام کاربر @cbjyz تو گروه پیدا نشد.")
@@ -89,7 +89,7 @@ async def piou_on(event):
     global piou_active, last_meat_time
     if not piou_active:
         piou_active = True
-        last_meat_time = 0  # این خط باعث میشه ربات درجا گوشت رو بفرسته و ۳۰ دقیقه بعد دوباره بفرسته
+        last_meat_time = 0  # این خط باعث میشه ربات درجا گوشت رو بفرسته
         await event.reply("🔫 سیستم پیو **روشن** شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$'))
