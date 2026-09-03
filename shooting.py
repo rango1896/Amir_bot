@@ -7,6 +7,7 @@ from core import client
 PIOU_GROUP = -1004346927517
 TARGET_MSG_ID = 18  # آیدی پیامی که قراره روش ریپلای بشه (از لینک شما استخراج شد)
 piou_active = False
+piou_shoot_active = True  # متغیر جدید برای خاموش کردن فقط شلیک و پیو هیل
 last_meat_time = 0
 
 # --- لوپ ارسال گوشت (درجا + هر ۳۰ دقیقه) ---
@@ -44,7 +45,7 @@ async def piou_main_loop():
         if piou_active:
             try:
                 cycle_count = 0
-                while piou_active:
+                while piou_active and piou_shoot_active:
                     cycle_count += 1
                     
                     # ۱. شلیک (ریپلای مستقیم روی پیام شماره ۱۸)
@@ -62,15 +63,15 @@ async def piou_main_loop():
                     if cycle_count % 10 == 0:
                         print("⏳ ۶ دقیقه استراحت...")
                         for _ in range(360):
-                            if not piou_active: break
+                            if not piou_active or not piou_shoot_active: break
                             await asyncio.sleep(1)
-                        if not piou_active: break
+                        if not piou_active or not piou_shoot_active: break
                     else:
                         # فاصله ۱۵ ثانیه‌ای بین شلیک‌ها
                         for _ in range(15):
-                            if not piou_active: break
+                            if not piou_active or not piou_shoot_active: break
                             await asyncio.sleep(1)
-                        if not piou_active: break
+                        if not piou_active or not piou_shoot_active: break
 
             except Exception as e:
                 print(f"❌ خطا در سیستم پیو: {e}")
