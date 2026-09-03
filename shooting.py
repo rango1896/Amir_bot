@@ -60,8 +60,8 @@ async def piou_main_loop():
                     
                     # ۴. استراحت ۴.۵ دقیقه (هر ۱۰ بار)
                     if cycle_count % 10 == 0:
-                        print("⏳ ۴ دقیقه و ۳۰ ثانیه استراحت...")
-                        for _ in range(270):
+                        print("⏳ ۶ دقیقه استراحت...")
+                        for _ in range(360):
                             if not piou_active: break
                             await asyncio.sleep(1)
                         if not piou_active: break
