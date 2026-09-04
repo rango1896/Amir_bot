@@ -8,10 +8,19 @@ from core import client
 active_shoot_group = -1004346927517  # گروه پیش‌فرض
 target_links = {-1004346927517: 18}  # {group_id: message_id}
 ammo_counter = 0  # شمارنده خرید مهمات
+ammo_limit = 9  # تعداد شلیک‌ها برای خرید مهمات (قابل تغییر با دستور تنظیم تیر)
 
 piou_active = False
 piou_shoot_active = True
 last_meat_time = 0
+
+# --- دستور تنظیم تیر ---
+@client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم تیر\s+(\d+)$'))
+async def set_ammo_limit(event):
+    global ammo_limit
+    new_limit = int(event.pattern_match.group(1))
+    ammo_limit = new_limit
+    await event.reply(f"✅ تنظیمات خرید مهمات تغییر کرد. از این به بعد هر {ammo_limit} شلیک، یک خرید مهمات انجام میشه.")
 
 # --- دستورات مدیریت لینک و گروه ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد لینک\s+(\S+)$'))
@@ -125,8 +134,8 @@ async def piou_main_loop():
                     # ۲. پیو هیل
                     await client.send_message(g_id, "پیو هیل", reply_to=m_id)
                     
-                    # ۳. خرید مهمات (هر ۹ شلیک)
-                    if ammo_counter % 9 == 0:
+                    # ۳. خرید مهمات (بر اساس تنظیم تیر)
+                    if ammo_counter % ammo_limit == 0:
                         await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                     
                     # ۴. استراحت ۶ دقیقه (هر ۱۰ بار)
@@ -137,8 +146,8 @@ async def piou_main_loop():
                             await asyncio.sleep(1)
                         if not piou_active or not piou_shoot_active: break
                     else:
-                        # فاصله ۱۵ ثانیه‌ای بین شلیک‌ها
-                        for _ in range(15):
+                        # فاصله ۲۰ ثانیه‌ای بین شلیک‌ها
+                        for _ in range(20):
                             if not piou_active or not piou_shoot_active: break
                             await asyncio.sleep(1)
                         if not piou_active or not piou_shoot_active: break
