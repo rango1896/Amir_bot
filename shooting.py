@@ -54,10 +54,6 @@ async def piou_main_loop():
                     # ۲. پیو هیل (ریپلای مستقیم روی پیام شماره ۱۸)
                     await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
                     
-                    # ۳. خرید مهمات (هر ۹ بار شلیک با ریپلای)
-                    if cycle_count % 9 == 0:
-                        await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=TARGET_MSG_ID)
-                    
                     # ۴. استراحت ۶ دقیقه (هر ۱۰ بار)
                     if cycle_count % 10 == 0:
                         print("⏳ ۶ دقیقه استراحت...")
