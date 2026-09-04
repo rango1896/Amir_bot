@@ -3,4 +3,4 @@ deep-translator
 flask
 python-socks
 aiosqlite
-aiohttp
+
