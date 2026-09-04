@@ -27,12 +27,10 @@ async def blind_shot_loop():
     while True:
         if piou_active:
             try:
-                # ۱. درجا شلیک بدون ریپلای میکنه
                 await client.send_message(PIOU_GROUP, "شلیک")
             except Exception as e:
                 print(f"خطا شلیک کور: {e}")
             
-            # ۲. بعدش ۵ دقیقه صبر میکنه (اگه وسطش خاموش کردی از حلقه میاد بیرون)
             for _ in range(300):
                 if not piou_active: break
                 await asyncio.sleep(1)
@@ -42,7 +40,8 @@ async def blind_shot_loop():
 # --- لوپ اصلی شلیک و پیو هیل (با ریپلای) ---
 async def piou_main_loop():
     while True:
-        if piou_active:
+        # توجه: فقط اگه هر دو متغیر روشن بودن شلیک میکنه
+        if piou_active and piou_shoot_active:
             try:
                 cycle_count = 0
                 while piou_active and piou_shoot_active:
@@ -59,7 +58,7 @@ async def piou_main_loop():
                     if cycle_count % 9 == 0:
                         await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=TARGET_MSG_ID)
                     
-                    # ۴. استراحت ۴.۵ دقیقه (هر ۱۰ بار)
+                    # ۴. استراحت ۶ دقیقه (هر ۱۰ بار)
                     if cycle_count % 10 == 0:
                         print("⏳ ۶ دقیقه استراحت...")
                         for _ in range(360):
@@ -77,14 +76,15 @@ async def piou_main_loop():
                 print(f"❌ خطا در سیستم پیو: {e}")
                 await asyncio.sleep(10)
         else:
-            await asyncio.sleep(5)
+            # این ۱ ثانیه صبر کردن باعث میشه ربات فریز نشه و هلپ و بقیه کارها ادامه پیدا کنن
+            await asyncio.sleep(1)
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$'))
 async def piou_on(event):
     global piou_active, last_meat_time
     if not piou_active:
         piou_active = True
-        last_meat_time = 0  # این خط باعث میشه ربات درجا گوشت رو بفرسته
+        last_meat_time = 0
         await event.reply("🔫 سیستم پیو **روشن** شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$'))
