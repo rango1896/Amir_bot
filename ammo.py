@@ -1,9 +1,9 @@
+import asyncio
 from telethon import events
 import core
 from core import client
 
 PIOU_GROUP = -1004346927517
-TARGET_MSG_ID = 18
 ammo_active = False
 shot_counter = 0
 
@@ -12,7 +12,7 @@ async def ammo_on(event):
     global ammo_active, shot_counter
     ammo_active = True
     shot_counter = 0
-    await event.reply("🛒 سیستم خرید مهمات **روشن** شد. (هر ۱۴ شلیک، یک خرید)")
+    await event.reply("🛒 سیستم خرید مهمات **روشن** شد. شمارش شلیک‌های ریپلای‌دار شروع شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^مهمات خاموش$'))
 async def ammo_off(event):
@@ -27,13 +27,15 @@ async def ammo_tracker(event):
     if event.chat_id != PIOU_GROUP: return
     
     text = (event.message.text or "").strip()
-    # اگه پیام شلیک بود و ریپلای روی همون پیام هدف (شماره ۱۸) بود
-    if text == "شلیک" and event.message.reply_to_msg_id == TARGET_MSG_ID:
+    
+    # اگه پیام شلیک بود و ریپلای کرده بودی (رو پیام ۱۸ یا هر پیام دیگه)
+    if text == "شلیک" and event.message.is_reply:
         shot_counter += 1
         print(f"🔫 شلیک شماره: {shot_counter}")
         
         # هر ۱۴ بار
         if shot_counter >= 14:
-            await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=TARGET_MSG_ID)
+            # رو همون پیامی که روش ریپلای کردی (پیام ۱۸) میگه خرید مهمات
+            await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=event.message.reply_to_msg_id)
             print("🛒 خرید مهمات انجام شد!")
-            shot_counter = 0 # صفر میکنه تا شمارش بعدی شروع بشه
+            shot_counter = 0 # صفر میکنه تا دوباره شمارش کنه
