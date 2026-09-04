@@ -9,11 +9,9 @@ import factory
 import fishing
 import cats
 import anti_delete
-import alerts
-import tags
+import alerts 
 import user_info
 import spam
-import voice
 import reactions
 import misc
 import shooting
