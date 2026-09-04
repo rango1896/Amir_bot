@@ -7,19 +7,12 @@ PIOU_GROUP = -1004346927517
 ammo_active = False
 shot_counter = 0
 
-# دیکشنری برای اعداد ترتیبی فارسی
-persian_ordinals = {
-    1: "اول", 2: "دوم", 3: "سوم", 4: "چهارم", 5: "پنجم", 6: "ششم",
-    7: "هفتم", 8: "هشتم", 9: "نهم", 10: "دهم", 11: "یازدهم",
-    12: "دوازدهم", 13: "سیزدهم", 14: "چهاردهم"
-}
-
 @client.on(events.NewMessage(outgoing=True, pattern=r'^مهمات روشن$'))
 async def ammo_on(event):
     global ammo_active, shot_counter
     ammo_active = True
     shot_counter = 0
-    await event.reply("🛒 سیستم خرید مهمات **روشن** شد. شمارش شلیک‌های ریپلای‌دار شروع شد.")
+    await event.reply("🛒 سیستم خرید مهمات **روشن** شد. (شمارش مخفیانه و سریع در پس‌زمینه)")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^مهمات خاموش$'))
 async def ammo_off(event):
@@ -36,18 +29,12 @@ async def ammo_tracker(event):
     text = (event.message.text or "").strip()
     reply_to_id = event.message.reply_to_msg_id
     
-    # اگه کلمه شلیک توش بود و ریپلای کرده بودی (رو پیام 18 یا هر پیام دیگه)
-    if "شلیک" in text and "فرستاده شد" not in text and reply_to_id is not None:
+    # فقط اگه پیام دقیقا "شلیک" بود و ریپلای داشت
+    if text == "شلیک" and reply_to_id is not None:
         shot_counter += 1
-        print(f"🔫 شلیک شماره: {shot_counter}")
         
-        # پیام دیباگ رو بدون صبر کردن میفرسته (اینجوری گیر نمیکنه)
-        ordinal = persian_ordinals.get(shot_counter, str(shot_counter))
-        asyncio.create_task(event.reply(f"شلیک {ordinal} فرستاده شد"))
-        
-        # هر ۱۴ بار
+        # وقتی به ۱۴ رسید
         if shot_counter >= 14:
-            # رو همون پیامی که روش ریپلای کردی (پیام 18) میگه خرید مهمات
-            asyncio.create_task(client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=reply_to_id))
-            print("🛒 خرید مهمات انجام شد!")
+            # خرید مهمات رو میفرسته
+            await client.send_message(PIOU_GROUP, "خرید مهمات", reply_to=reply_to_id)
             shot_counter = 0 # صفر میکنه تا دوباره شمارش کنه
