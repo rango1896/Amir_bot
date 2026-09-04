@@ -3,5 +3,3 @@ deep-translator
 flask
 python-socks
 aiosqlite
-vosk
-soundfile
