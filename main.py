@@ -35,7 +35,7 @@ async def turn_on_all(event):
     core.fishing_active = True
     core.ghost_mode_active = True
     smart_shoot.smart_active = True
-        ammo.ammo_active = True
+    ammo.ammo_active = True
     # روشن کردن کارخونه
     if not core.factory_active:
         core.factory_active = True
