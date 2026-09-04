@@ -3,11 +3,11 @@ from telethon import events
 import core
 from core import client
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^هوش‌\s+(.+)$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^هوش\s+(.+)$'))
 async def ai_handler(event):
     prompt = event.pattern_match.group(1).strip()
     if not prompt:
-        return await event.reply("❗ سوالی نپرسیدی! مثال: `هوش‌ آب پختن پلو چقدر طول میکشه؟`")
+        return await event.reply("❗ سوالی نپرسیدی! مثال: `هوش آب پختن پلو چقدر طول میکشه؟`")
     
     # نشون دادن حالت تایپ کردن تا ربات جواب رو بیاره
     async with client.action(event.chat_id, 'typing'):
