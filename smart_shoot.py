@@ -111,11 +111,11 @@ async def death_cycle_task():
             await asyncio.sleep(2)
             await client.send_message(g_id, "پیو هیل", reply_to=m_id)
             
-            # خرید مهمات (هر ۹ شلیک)
-            if shooting.ammo_counter % 9 == 0:
+            # خرید مهمات (بر اساس تنظیم تیر در shooting.py)
+            if shooting.ammo_counter % shooting.ammo_limit == 0:
                 await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
             
-            await asyncio.sleep(16)
+            await asyncio.sleep(20)
         
         shooting.piou_shoot_active = True
             
@@ -145,11 +145,11 @@ async def refill_cycle_task():
                 await asyncio.sleep(2)
                 await client.send_message(g_id, "پیو هیل", reply_to=m_id)
                 
-                # خرید مهمات (هر ۹ شلیک)
-                if shooting.ammo_counter % 9 == 0:
+                # خرید مهمات (بر اساس تنظیم تیر در shooting.py)
+                if shooting.ammo_counter % shooting.ammo_limit == 0:
                     await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                 
-                await asyncio.sleep(16)
+                await asyncio.sleep(20)
             
             if not smart_active:
                 shooting.piou_shoot_active = True
