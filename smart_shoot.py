@@ -5,8 +5,6 @@ import core
 from core import client
 import shooting
 
-PIOU_GROUP = -1004346927517
-TARGET_MSG_ID = 18
 smart_active = False
 refill_active = True
 current_task = None
@@ -28,7 +26,6 @@ async def smart_off(event):
     smart_active = False
     if current_task and not current_task.done():
         current_task.cancel()
-    # روشن کردن دوباره شلیک‌های shooting.py وقتی هوشمند خاموش میشه
     shooting.piou_shoot_active = True
     await event.reply("🛑 سیستم شلیک هوشمند **خاموش** شد.")
 
@@ -47,7 +44,7 @@ async def refill_off(event):
 @client.on(events.NewMessage(incoming=True))
 async def game_listener(event):
     global smart_active, death_seconds, refill_seconds, current_task, refill_active
-    if not smart_active or event.chat_id != PIOU_GROUP: return
+    if not smart_active or event.chat_id != shooting.active_shoot_group: return
     
     text = event.message.text or ""
     
@@ -84,17 +81,17 @@ async def wait_for_events():
 
 async def death_cycle_task():
     try:
-        # خاموش کردن فقط شلیک و پیو هیل (گوشت و شلیک کور سر جاشون میمونن)
         shooting.piou_shoot_active = False
-        print("🛑 شلیک‌های shooting.py متوقف شد.")
+        g_id = shooting.active_shoot_group
+        m_id = shooting.target_links.get(g_id, 18)
         
-        await client.send_message(PIOU_GROUP, "حالت مرده فعال شد")
-        my_msg = await client.send_message(PIOU_GROUP, "پیو من")
+        await client.send_message(g_id, "حالت مرده فعال شد")
+        my_msg = await client.send_message(g_id, "پیو من")
         
         bandages = 0
         for _ in range(5):
             await asyncio.sleep(2)
-            msgs = await client.get_messages(PIOU_GROUP, reply_to=my_msg.id, limit=1)
+            msgs = await client.get_messages(g_id, reply_to=my_msg.id, limit=1)
             if msgs and msgs[0].sender and msgs[0].sender.bot:
                 panel_text = msgs[0].text or ""
                 b_match = re.search(r'جعبه‌های کمک اولیه:\s*(\d+)\s*/\s*\d+', panel_text)
@@ -102,62 +99,63 @@ async def death_cycle_task():
                     bandages = int(b_match.group(1))
                     break
         
-        await client.send_message(PIOU_GROUP, f"تعداد بانداژ ها محاسبه شد ({bandages} تا)")
-        
-        print(f"⏳ صبر میکنیم تا یارو زنده بشه: {death_seconds + 2} ثانیه")
+        await client.send_message(g_id, f"تعداد بانداژ ها محاسبه شد ({bandages} تا)")
         await asyncio.sleep(death_seconds + 2)
         
         for _ in range(bandages):
             if not smart_active: 
                 shooting.piou_shoot_active = True
                 return
-            await client.send_message(PIOU_GROUP, "شلیک", reply_to=TARGET_MSG_ID)
+            await client.send_message(g_id, "شلیک", reply_to=m_id)
+            shooting.ammo_counter += 1
             await asyncio.sleep(2)
-            await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
+            await client.send_message(g_id, "پیو هیل", reply_to=m_id)
+            
+            # خرید مهمات (هر ۹ شلیک)
+            if shooting.ammo_counter % 9 == 0:
+                await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
+            
             await asyncio.sleep(16)
         
-        # روشن کردن دوباره شلیک‌های shooting.py بعد از تموم شدن چرخه
         shooting.piou_shoot_active = True
-        print("✅ شلیک‌های shooting.py دوباره روشن شد.")
             
     except asyncio.CancelledError:
-        print("🔄 چرخه مرگ لغو شد!")
         return
 
 async def refill_cycle_task():
     try:
-        # خاموش کردن فقط شلیک و پیو هیل
         shooting.piou_shoot_active = False
-        print("🛑 شلیک‌های shooting.py متوقف شد.")
+        g_id = shooting.active_shoot_group
+        m_id = shooting.target_links.get(g_id, 18)
         
-        await client.send_message(PIOU_GROUP, "حالت جعبه های کمک اولیه فعال شد")
-        
-        print(f"⏳ صبر میکنیم تا بانداژها پر شوند: {refill_seconds} ثانیه")
+        await client.send_message(g_id, "حالت جعبه های کمک اولیه فعال شد")
         await asyncio.sleep(refill_seconds + 2)
         
         if not smart_active:
             shooting.piou_shoot_active = True
             return
         
-        # چرخه بی‌نهایت: ۱۰ شلیک + ۶ دقیقه استراحت
         while smart_active:
-            print("🔫 شلیک ۱۰ تایی...")
             for _ in range(10):
                 if not smart_active: 
                     shooting.piou_shoot_active = True
                     return
-                await client.send_message(PIOU_GROUP, "شلیک", reply_to=TARGET_MSG_ID)
+                await client.send_message(g_id, "شلیک", reply_to=m_id)
+                shooting.ammo_counter += 1
                 await asyncio.sleep(2)
-                await client.send_message(PIOU_GROUP, "پیو هیل", reply_to=TARGET_MSG_ID)
+                await client.send_message(g_id, "پیو هیل", reply_to=m_id)
+                
+                # خرید مهمات (هر ۹ شلیک)
+                if shooting.ammo_counter % 9 == 0:
+                    await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
+                
                 await asyncio.sleep(16)
             
             if not smart_active:
                 shooting.piou_shoot_active = True
                 return
             
-            print("⏳ ۶ دقیقه استراحت (چرخه بانداژ)...")
             await asyncio.sleep(360)
             
     except asyncio.CancelledError:
-        print("🔄 چرخه پر شدن بانداژ لغو شد!")
         return
