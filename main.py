@@ -16,7 +16,6 @@ import reactions
 import misc
 import shooting
 import smart_shoot
-import ammo
 app = Flask(__name__)
 @app.route('/')
 def home():
