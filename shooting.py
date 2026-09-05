@@ -1,6 +1,6 @@
 import asyncio
 import time
-from telethon import events
+from telethon import events, utils
 import core
 from core import client
 
@@ -31,7 +31,9 @@ async def add_link(event):
         else:
             parts = link.split("t.me/")[-1].split("/")
             if len(parts) == 2:
-                ent = await client.get_entity(parts[0]); g_id = ent.id; m_id = int(parts[1])
+                ent = await client.get_entity(parts[0])
+                g_id = utils.get_peer_id(ent)  # استخراج آیدی استاندارد از یوزرنیم
+                m_id = int(parts[1])
                 core.pio_target_links[g_id] = m_id; core.pio_active_group = g_id
                 await core.save_pio_db()
                 await event.reply(f"✅ لینک ثبت شد. شلیک‌ها روی پیام `{m_id}` انجام میشه.")
@@ -50,7 +52,12 @@ async def remove_link(event):
 async def add_group(event):
     g_str = event.pattern_match.group(1)
     try:
-        g_id = int(g_str) if g_str.lstrip('-').isdigit() else (await client.get_entity(g_str)).id
+        if g_str.lstrip('-').isdigit():
+            g_id = int(g_str)
+        else:
+            ent = await client.get_entity(g_str)
+            g_id = utils.get_peer_id(ent)  # استخراج آیدی استاندارد از یوزرنیم
+            
         if g_id in core.pio_target_links:
             core.pio_active_group = g_id
             await core.save_pio_db()
