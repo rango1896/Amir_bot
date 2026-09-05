@@ -25,7 +25,7 @@ async def add_link(event):
             if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
                 g_id = int("-100" + parts[0]); m_id = int(parts[1])
                 core.pio_target_links[g_id] = m_id; core.pio_active_group = g_id
-                await core.save_db()
+                await core.save_pio_db()
                 await event.reply(f"✅ لینک ثبت شد. شلیک‌ها روی پیام `{m_id}` انجام میشه.")
             else: await event.reply("❗ فرمت لینک اشتباه است.")
         else:
@@ -33,7 +33,7 @@ async def add_link(event):
             if len(parts) == 2:
                 ent = await client.get_entity(parts[0]); g_id = ent.id; m_id = int(parts[1])
                 core.pio_target_links[g_id] = m_id; core.pio_active_group = g_id
-                await core.save_db()
+                await core.save_pio_db()
                 await event.reply(f"✅ لینک ثبت شد. شلیک‌ها روی پیام `{m_id}` انجام میشه.")
             else: await event.reply("❗ فرمت لینک اشتباه است.")
     except: await event.reply("❗ خطا در ثبت لینک.")
@@ -43,7 +43,7 @@ async def remove_link(event):
     if core.pio_active_group in core.pio_target_links:
         del core.pio_target_links[core.pio_active_group]
     core.pio_active_group = None
-    await core.save_db()
+    await core.save_pio_db()
     await event.reply("✅ لینک پاک شد. ربات متوقف شد تا لینک جدید بدی.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد گروه\s+(.+)$'))
@@ -53,7 +53,7 @@ async def add_group(event):
         g_id = int(g_str) if g_str.lstrip('-').isdigit() else (await client.get_entity(g_str)).id
         if g_id in core.pio_target_links:
             core.pio_active_group = g_id
-            await core.save_db()
+            await core.save_pio_db()
             await event.reply(f"✅ گروه فعال شد. شلیک روی پیام `{core.pio_target_links[g_id]}`.")
         else: await event.reply("❗ برای این گروه هنوز لینکی ثبت نشده. اول `اد لینک` بزن.")
     except: await event.reply("❗ گروه پیدا نشد.")
@@ -63,7 +63,7 @@ async def remove_group(event):
     if core.pio_active_group in core.pio_target_links:
         del core.pio_target_links[core.pio_active_group]
     core.pio_active_group = None
-    await core.save_db()
+    await core.save_pio_db()
     await event.reply("✅ گروه فعلی حذف شد.")
 
 async def meat_loop():
