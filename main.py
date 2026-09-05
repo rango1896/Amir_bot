@@ -17,6 +17,7 @@ import reactions
 import misc
 import shooting
 import smart_shoot
+import multi_react
 
 app = Flask(__name__)
 @app.route('/')
@@ -71,6 +72,7 @@ async def main():
     asyncio.ensure_future(shooting.meat_loop())
     asyncio.ensure_future(shooting.blind_shot_loop())
     asyncio.ensure_future(shooting.piou_main_loop())
+    asyncio.ensure_future(multi_react.start_multi_clients())
     
     await core.client.run_until_disconnected()
 
