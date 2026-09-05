@@ -20,6 +20,7 @@ stray_cat_active = True
 factory_active = False
 
 DB_TAG = "#DB_AMIR"
+DB_CHAT = "hankhhh" # گروهی که دیتابیس اصلی توش ذخیره میشه
 anti_delete_active = False
 anti_delete_targets = {}
 message_cache = {}
@@ -70,14 +71,11 @@ async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
     global pio_active_group, pio_target_links
     
-    # لود دیتابیس اصلی ربات
-    async for msg in client.iter_messages('me', limit=50):
+    # لود دیتابیس اصلی ربات از گروه hankhhh
+    async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
             try:
                 json_str = msg.text.replace(DB_TAG, "").strip()
-                if json_str.startswith("```json"): json_str = json_str[7:]
-                if json_str.endswith("```"): json_str = json_str[:-3]
-                json_str = json_str.strip()
                 if json_str:
                     data = json.loads(json_str)
                     anti_delete_targets = {int(k): v for k, v in data.get("anti_delete", {}).items()}
@@ -85,13 +83,13 @@ async def load_db():
                     notes_list = data.get("notes", [])
                     keywords_list = set(data.get("keywords", []))
                     auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
-                    print("✅ دیتابیس ربات بارگذاری شد.")
+                    print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
             break
 
-    # لود دیتابیس پیو
-    async for msg in client.iter_messages('me', limit=50):
+    # لود دیتابیس پیو از گروه hankhhh
+    async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_PIOU_TAG):
             try:
                 json_str = msg.text.replace(DB_PIOU_TAG, "").strip()
@@ -99,7 +97,7 @@ async def load_db():
                     data = json.loads(json_str)
                     pio_active_group = data.get("active_group", None)
                     pio_target_links = {int(k): v for k, v in data.get("links", {}).items()}
-                    print("✅ تنظیمات پیو بارگذاری شد.")
+                    print("✅ تنظیمات پیو از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس پیو: {e}")
             break
@@ -112,17 +110,17 @@ async def save_db():
         "keywords": list(keywords_list),
         "reactions": {str(k): v for k, v in auto_react_targets.items()}
     }
-    json_str = json.dumps(data, ensure_ascii=False, indent=2)
-    text_to_save = f"{DB_TAG}\n```json\n{json_str}\n```"
+    json_str = json.dumps(data, ensure_ascii=False)
+    text_to_save = f"{DB_TAG} {json_str}" # همون فرمت ساده قبلی
     
     if len(text_to_save) > 4000: text_to_save = text_to_save[:4000]
     found_msg = None
-    async for msg in client.iter_messages('me', limit=50):
+    async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
             found_msg = msg; break
     try:
         if found_msg: await found_msg.edit(text_to_save, link_preview=False)
-        else: await client.send_message('me', text_to_save, link_preview=False)
+        else: await client.send_message(DB_CHAT, text_to_save, link_preview=False)
     except Exception as e: print(f"❌ خطا در ذخیره دیتابیس: {e}")
 
 async def save_pio_db():
@@ -130,10 +128,10 @@ async def save_pio_db():
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_PIOU_TAG} {json_str}"
     found_msg = None
-    async for msg in client.iter_messages('me', limit=50):
+    async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_PIOU_TAG):
             found_msg = msg; break
     try:
         if found_msg: await found_msg.edit(text_to_save, link_preview=False)
-        else: await client.send_message('me', text_to_save, link_preview=False)
+        else: await client.send_message(DB_CHAT, text_to_save, link_preview=False)
     except Exception as e: print(f"❌ خطا در ذخیره دیتابیس پیو: {e}")
