@@ -3,6 +3,7 @@ import core
 from flask import Flask
 import threading
 from telethon import events
+import urllib.request
 
 # لود کردن مستقیم فایل‌ها
 import factory
@@ -16,6 +17,7 @@ import reactions
 import misc
 import shooting
 import smart_shoot
+
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -34,11 +36,11 @@ async def turn_on_all(event):
     core.fishing_active = True
     core.ghost_mode_active = True
     smart_shoot.smart_active = True
-    ammo.ammo_active = True
+    
     # روشن کردن کارخونه
     if not core.factory_active:
         core.factory_active = True
-        asyncio.create_task(factory.factory_cycle())
+        asyncio.ensure_future(factory.factory_cycle())
         
     # روشن کردن واکنش خودکار
     if hasattr(reactions, 'react_active'):
@@ -52,25 +54,34 @@ async def turn_on_all(event):
 async def main():
     await core.client.start()
     await core.load_db()
-    core.group_entity = await core.client.get_entity(core.TARGET_GROUP)
-    print(f"✅ گروه پیدا شد: {core.group_entity.title}")
+    
+    try:
+        core.group_entity = await core.client.get_entity(core.TARGET_GROUP)
+        print(f"✅ گروه پیدا شد: {core.group_entity.title}")
+    except:
+        print("⚠️ گروه پیش‌فرض پیدا نشد، اما ربات روشن میشه.")
+        
     print("✅ سلف‌بات Amir روشن شد!")
     
-    await asyncio.gather(
-        cats.meow_loop(),
-        cats.update_name_clock(),
-        fishing.collect_points_loop(),
-        fishing.fishing_loop(),
-        misc.schedule_loop(),
-        shooting.meat_loop(),
-        shooting.blind_shot_loop(),
-        shooting.piou_main_loop()
-    )
+    asyncio.ensure_future(cats.meow_loop())
+    asyncio.ensure_future(cats.update_name_clock())
+    asyncio.ensure_future(fishing.collect_points_loop())
+    asyncio.ensure_future(fishing.fishing_loop())
+    asyncio.ensure_future(misc.schedule_loop())
+    asyncio.ensure_future(shooting.meat_loop())
+    asyncio.ensure_future(shooting.blind_shot_loop())
+    asyncio.ensure_future(shooting.piou_main_loop())
+    
+    await core.client.run_until_disconnected()
 
 def keep_alive():
     import time
     while True:
-        time.sleep(60)
+        try:
+            urllib.request.urlopen("https://friendpiobot.onrender.com/")
+        except:
+            pass
+        time.sleep(280)
 
 if __name__ == "__main__":
     threading.Thread(target=run_web).start()
