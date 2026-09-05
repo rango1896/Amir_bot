@@ -1,7 +1,7 @@
 import asyncio
-import re
 from telethon import TelegramClient, events
 from telethon.tl.functions.messages import SendReactionRequest
+from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.types import ReactionEmoji
 import core
 from core import client as client1
@@ -12,9 +12,10 @@ client3 = TelegramClient('react_sessions/friend3_session', core.API_ID, core.API
 client4 = TelegramClient('react_sessions/friendAmir_session', core.API_ID, core.API_HASH)
 
 multi_clients = [client1, client2, client3, client4]
-multi_react_active = False
-react_task = None
-last_msg_id = 0
+
+# متغیرهای واکنش عمومی
+multi_react_chat_id = None
+multi_react_emoji = None
 
 async def start_multi_clients():
     if not client2.is_connected(): await client2.start()
@@ -22,60 +23,59 @@ async def start_multi_clients():
     if not client4.is_connected(): await client4.start()
     print("✅ تمام ۴ سشن برای واکنش عمومی متصل شدند.")
 
-def extract_username(link):
-    if "t.me/c/" in link: return None # یعنی گروه خصوصیه
-    parts = link.split("t.me/")[-1].split("/")
-    return parts[0] if parts[0] else None
-
-@client1.on(events.NewMessage(outgoing=True, pattern=r'^واکنش عمومی\s+(\S+)\s+(\S+)$'))
+@client1.on(events.NewMessage(outgoing=True, pattern=r'^اد واکنش عمومی\s+(\S+)\s+(\S+)$'))
 async def add_multi_react(event):
-    global multi_react_active, react_task, last_msg_id
+    global multi_react_chat_id, multi_react_emoji
     link = event.pattern_match.group(1)
     emoji = event.pattern_match.group(2)
     
-    username = extract_username(link)
-    if not username:
-        return await event.reply("❗ این لینک مال گروه خصوصیه! توی گروه‌های خصوصی نمیشه بدون عضو شدن واکنش زد. لطفا لینک کانال/گروه عمومی بده.")
-        
-    multi_react_active = True
-    last_msg_id = 0
-    if react_task and not react_task.done(): react_task.cancel()
-    
-    await start_multi_clients()
-    react_task = asyncio.create_task(poll_and_react_loop(username, emoji))
-    await event.reply(f"✅ واکنش عمومی {emoji} برای `{username}` فعال شد. (۴ اکانت همزمان واکنش میدن بدون عضو شدن)")
+    try:
+        # پیدا کردن آیدی گروه/کانال
+        if "t.me/c/" in link:
+            parts = link.split("t.me/c/")[-1].split("/")
+            if len(parts) == 2 and parts[0].isdigit():
+                entity = await client1.get_entity(int("-100" + parts[0]))
+            else:
+                return await event.reply("❗ لینک گروه خصوصی اشتباه است.")
+        else:
+            username = link.split("t.me/")[-1].split("/")[0]
+            entity = await client1.get_entity(username)
+            
+        # عضو شدن سشن خودمون (client1) تو کانال/گروه
+        try:
+            await client1(JoinChannelRequest(entity))
+            print(f"✅ سشن شما عضو {entity.title} شد.")
+        except Exception as e:
+            print(f"عضو شدن انجام نشد (شاید قبلا عضو بوده‌اید): {e}")
 
-@client1.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش عمومی$'))
+        multi_react_chat_id = entity.id
+        multi_react_emoji = emoji
+        
+        await start_multi_clients()
+        await event.reply(f"✅ واکنش عمومی {emoji} فعال شد.\nسشن شما عضو شد و منتظر میمونه تا پست جدید بیاد، بعدش بقیه سشن‌ها رو خبر می‌کنه.")
+    except Exception as e:
+        await event.reply(f"❗ خطا در ثبت لینک: {e}")
+
+@client1.on(events.NewMessage(outgoing=True, pattern=r'^اد حذف واکنش عمومی$'))
 async def remove_multi_react(event):
-    global multi_react_active, react_task
-    multi_react_active = False
-    if react_task and not react_task.done(): react_task.cancel()
+    global multi_react_chat_id, multi_react_emoji
+    multi_react_chat_id = None
+    multi_react_emoji = None
     await event.reply("🛑 واکنش عمومی متوقف شد.")
 
-async def poll_and_react_loop(username, emoji):
-    global last_msg_id
-    try:
-        entity = await client1.get_entity(username)
-        # گرفتن آخرین پست برای اینکه روی پست‌های قدیمی واکنش نزنه
-        msgs = await client1.get_messages(entity, limit=1)
-        if msgs: last_msg_id = msgs[0].id
-    except Exception as e:
-        print(f"❌ خطا در پیدا کردن کانال: {e}")
-        return
-
-    while multi_react_active:
+@client1.on(events.NewMessage(incoming=True))
+async def multi_react_listener(event):
+    # اگه واکنش عمومی روشن بود و پیام از کانال هدف اومد
+    if multi_react_chat_id and event.chat_id == multi_react_chat_id and multi_react_emoji:
         try:
-            msgs = await client1.get_messages(entity, limit=1)
-            if msgs and msgs[0].id > last_msg_id:
-                last_msg_id = msgs[0].id
-                print(f"🔔 پست جدید در {username}! ۴ اکانت در حال واکنش...")
-                
-                for c in multi_clients:
-                    try:
-                        await c(SendReactionRequest(peer=entity, msg_id=last_msg_id, reaction=[ReactionEmoji(emoticon=emoji)]))
-                    except Exception as e:
-                        print(f"خطا در واکنش یه اکانت: {e}")
-        except Exception as e:
-            print(f"خطا در چک کردن کانال: {e}")
+            # ۱. اول سشن خودمون واکنش میده
+            await client1(SendReactionRequest(peer=event.input_chat, msg_id=event.id, reaction=[ReactionEmoji(emoticon=multi_react_emoji)]))
             
-        await asyncio.sleep(5) # هر ۵ ثانیه یه بار چک میکنه
+            # ۲. بعد بقیه سشن‌ها رو خبر می‌کنیم که بیان و واکنش بزنن
+            for c in [client2, client3, client4]:
+                try:
+                    await c(SendReactionRequest(peer=event.input_chat, msg_id=event.id, reaction=[ReactionEmoji(emoticon=multi_react_emoji)]))
+                except Exception as e:
+                    print(f"خطا در واکنش سشن رفیق: {e}")
+        except Exception as e:
+            print(f"خطا در واکنش عمومی: {e}")
