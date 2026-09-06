@@ -9,12 +9,19 @@ ammo_limit = 9
 piou_active = False
 piou_shoot_active = True
 last_meat_time = 0
+shoot_interval = 60  # زمان پیش‌فرض بین شلیک‌ها (هر ۶۰ ثانیه)
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم تیر\s+(\d+)$'))
 async def set_ammo_limit(event):
     global ammo_limit
     ammo_limit = int(event.pattern_match.group(1))
     await event.reply(f"✅ تنظیمات خرید مهمات تغییر کرد. از این به بعد هر {ammo_limit} شلیک، یک خرید مهمات انجام میشه.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم زمان شلیک\s+(\d+)$'))
+async def set_shoot_interval(event):
+    global shoot_interval
+    shoot_interval = int(event.pattern_match.group(1))
+    await event.reply(f"✅ زمان‌بندی شلیک تغییر کرد. از این به بعد هر {shoot_interval} ثانیه یک‌بار شلیک و ۵ ثانیه بعدش پیو هیل فرستاده میشه.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد لینک\s+(\S+)$'))
 async def add_link(event):
@@ -96,25 +103,24 @@ async def piou_main_loop():
     while True:
         if piou_active and piou_shoot_active and core.pio_active_group:
             try:
-                cycle_count = 0
                 while piou_active and piou_shoot_active and core.pio_active_group:
-                    cycle_count += 1
                     g_id = core.pio_active_group
                     m_id = core.pio_target_links.get(g_id, 18)
                     
+                    # ۱. شلیک
                     await client.send_message(g_id, "شلیک", reply_to=m_id); ammo_counter += 1
-                    await asyncio.sleep(2)
+                    
+                    # ۲. ۵ ثانیه صبر
+                    await asyncio.sleep(5)
+                    
+                    # ۳. پیو هیل
                     await client.send_message(g_id, "پیو هیل", reply_to=m_id)
                     if ammo_counter % ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                     
-                    if cycle_count % 10 == 0:
-                        for _ in range(360):
-                            if not piou_active or not piou_shoot_active or not core.pio_active_group: break
-                            await asyncio.sleep(1)
-                    else:
-                        for _ in range(20):
-                            if not piou_active or not piou_shoot_active or not core.pio_active_group: break
-                            await asyncio.sleep(1)
+                    # ۴. صبر کردن به اندازه زمان تنظیم شده (پیش‌فرض ۶۰ ثانیه)
+                    for _ in range(shoot_interval):
+                        if not piou_active or not piou_shoot_active or not core.pio_active_group: break
+                        await asyncio.sleep(1)
             except: await asyncio.sleep(10)
         else: await asyncio.sleep(1)
 
