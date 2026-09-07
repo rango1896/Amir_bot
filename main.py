@@ -33,50 +33,25 @@ def run_web():
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه روشن$'))
 async def pio_all_on(event):
     g_id = event.chat_id
-    # ۱. پیو روشن
     await client.send_message(g_id, "پیو روشن")
-    shooting.piou_active = True
     await asyncio.sleep(3)
-    # ۲. بانداژ روشن
     await client.send_message(g_id, "بانداژ روشن")
-    smart_shoot.refill_active = True
     await asyncio.sleep(3)
-    # ۳. هوشمند روشن
     await client.send_message(g_id, "هوشمند روشن")
-    smart_shoot.smart_active = True
-    if smart_shoot.current_task is None or smart_shoot.current_task.done():
-        smart_shoot.current_task = asyncio.create_task(asyncio.sleep(0))
     await asyncio.sleep(4)
-    # ۴. اسکواد روشن
     await client.send_message(g_id, "اسکواد روشن")
-    squad.squad_active = True
-    if squad.squad_task is None or squad.squad_task.done():
-        squad.squad_task = asyncio.create_task(squad.squad_loop())
 
 # === دستور ترکیبی پیو همه خاموش ===
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه خاموش$'))
 async def pio_all_off(event):
     g_id = event.chat_id
-    # ۱. پیو خاموش
     await client.send_message(g_id, "پیو خاموش")
-    shooting.piou_active = False
     await asyncio.sleep(3)
-    # ۲. بانداژ خاموش
     await client.send_message(g_id, "بانداژ خاموش")
-    smart_shoot.refill_active = False
     await asyncio.sleep(3)
-    # ۳. هوشمند خاموش
     await client.send_message(g_id, "هوشمند خاموش")
-    smart_shoot.smart_active = False
-    if smart_shoot.current_task and not smart_shoot.current_task.done():
-        smart_shoot.current_task.cancel()
-    shooting.piou_shoot_active = True
     await asyncio.sleep(4)
-    # ۴. اسکواد خاموش
     await client.send_message(g_id, "اسکواد خاموش")
-    squad.squad_active = False
-    if squad.squad_task and not squad.squad_task.done():
-        squad.squad_task.cancel()
 
 # === دستور روشن کردن همه قابلیت‌ها ===
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^روشن همه$'))
