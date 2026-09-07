@@ -33,25 +33,27 @@ def run_web():
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه روشن$'))
 async def pio_all_on(event):
     g_id = event.chat_id
-    await client.send_message(g_id, "پیو روشن")
+    # فقط همون کلمات رو از طرف شما میفرسته
+    await core.client.send_message(g_id, "پیو روشن")
     await asyncio.sleep(3)
-    await client.send_message(g_id, "بانداژ روشن")
+    await core.client.send_message(g_id, "بانداژ روشن")
     await asyncio.sleep(3)
-    await client.send_message(g_id, "هوشمند روشن")
+    await core.client.send_message(g_id, "هوشمند روشن")
     await asyncio.sleep(4)
-    await client.send_message(g_id, "اسکواد روشن")
+    await core.client.send_message(g_id, "اسکواد روشن")
 
 # === دستور ترکیبی پیو همه خاموش ===
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه خاموش$'))
 async def pio_all_off(event):
     g_id = event.chat_id
-    await client.send_message(g_id, "پیو خاموش")
+    # فقط همون کلمات رو از طرف شما میفرسته
+    await core.client.send_message(g_id, "پیو خاموش")
     await asyncio.sleep(3)
-    await client.send_message(g_id, "بانداژ خاموش")
+    await core.client.send_message(g_id, "بانداژ خاموش")
     await asyncio.sleep(3)
-    await client.send_message(g_id, "هوشمند خاموش")
+    await core.client.send_message(g_id, "هوشمند خاموش")
     await asyncio.sleep(4)
-    await client.send_message(g_id, "اسکواد خاموش")
+    await core.client.send_message(g_id, "اسکواد خاموش")
 
 # === دستور روشن کردن همه قابلیت‌ها ===
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^روشن همه$'))
