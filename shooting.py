@@ -98,10 +98,12 @@ async def game_state_listener(event):
             secs = int(match.group(1))
             cooldown_until = time.time() + secs
             print(f"⏳ خنکی شلیک فعال شد: {secs} ثانیه")
+            await client.send_message(event.chat_id, f"⏳ {secs} ثانیه دیگه دوباره شلیک میکنم.")
         elif match_min:
             secs = int(match_min.group(1)) * 60
             cooldown_until = time.time() + secs
             print(f"⏳ خنکی شلیک فعال شد: {secs} ثانیه")
+            await client.send_message(event.chat_id, f"⏳ {secs} ثانیه دیگه دوباره شلیک میکنم.")
             
     # ۲. تشخیص خون پر
     elif "نیازی به هیل نیست" in text and "کامله" in text:
