@@ -24,28 +24,11 @@ async def click_btn(g_id, text, timeout=10):
                                 pass
     return False
 
-async def get_list_msg(g_id, timeout=10):
-    """صبر می‌کنه تا پیام لیست مارکت (بدون دکمه بازگشت) بیاد"""
-    for _ in range(timeout):
-        if not art_active: return None
-        async for msg in client.iter_messages(g_id, limit=5):
-            if msg.buttons and msg.sender and msg.sender.bot:
-                has_back = any("بازگشت" in btn.text for row in msg.buttons for btn in row)
-                if not has_back:
-                    return msg
-        await asyncio.sleep(1)
-    return None
-
-async def get_detail_msg(g_id, timeout=10):
-    """صبر می‌کنه تا پیام جزئیات آرت (با دکمه بازگشت) بیاد"""
-    for _ in range(timeout):
-        if not art_active: return None
-        async for msg in client.iter_messages(g_id, limit=5):
-            if msg.buttons and msg.sender and msg.sender.bot:
-                has_back = any("بازگشت" in btn.text for row in msg.buttons for btn in row)
-                if has_back:
-                    return msg
-        await asyncio.sleep(1)
+async def get_current_panel(g_id):
+    """آخرین پیام ربات بازی که دکمه داره رو پیدا می‌کنه"""
+    async for msg in client.iter_messages(g_id, limit=5):
+        if msg.buttons and msg.sender and msg.sender.bot:
+            return msg
     return None
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیدا کردن آرت\s+(.+)$'))
@@ -77,7 +60,7 @@ async def art_loop():
             continue
             
         g_id = core.pio_active_group
-        clicked_ids = set() # ذخیره دکمه‌های کلیک شده برای هر دوره جستجو
+        clicked_texts = set() # ذخیره اسم دکمه‌هایی که کلیک کردیم
             
         try:
             # ۱. ارسال پیو آرت
@@ -95,48 +78,58 @@ async def art_loop():
             
             # ۳. چرخه صفحه‌بندی
             while art_active:
-                list_msg = await get_list_msg(g_id)
-                if not list_msg:
-                    print("⚠️ لیست مارکت پیدا نشد. استارت مجدد...")
+                panel = await get_current_panel(g_id)
+                if not panel:
+                    print("⚠️ هیچ پنلی پیدا نشد. استارت مجدد...")
                     break
-                    
+                
+                # اگه هنوز تو صفحه جزئیات یک آرت هستیم (توش قیمت یا 🖼 هست)
+                # باید دکمه بازگشت رو بزنیم تا برگردیم به لیست
+                if "🖼" in (panel.text or "") or "قیمت" in (panel.text or ""):
+                    print("⏳ هنوز تو صفحه آرت هستیم، کلیک روی بازگشت...")
+                    await click_btn(g_id, "بازگشت", timeout=5)
+                    await asyncio.sleep(3)
+                    continue # برمی‌گردیم اول حلقه تا لیست رو دوباره بخونیم
+                
+                # الان تو صفحه لیست مارکت هستیم
                 target_btn = None
                 next_btn = None
                 
-                for row in list_msg.buttons:
+                for row in panel.buttons:
                     for btn in row:
                         txt = btn.text
-                        btn_id = repr(btn)
                         if art_name in txt and "مارکت" not in txt and "بعد" not in txt and "بازگشت" not in txt:
-                            if btn_id not in clicked_ids:
+                            if txt not in clicked_texts:
                                 target_btn = btn
-                        elif "بعد" in txt or "next" in txt.lower() or "›" in txt or "⏭" in txt or "برو" in txt:
+                        elif "بعد" in txt or "next" in txt.lower() or "›" in txt or "⏭" in txt or "برو" in txt or "➡️" in txt:
                             next_btn = btn
                             
                 # ۴. اگه آرت پیدا شد، روش کلیک کن
                 if target_btn:
                     try:
-                        clicked_ids.add(repr(target_btn))
+                        clicked_texts.add(target_btn.text)
                         await target_btn.click()
                         print(f"🔍 کلیک روی آرت: {target_btn.text}")
+                        await asyncio.sleep(4) # صبر برای لود شدن صفحه جزئیات آرت
                         
-                        # صبر برای باز شدن صفحه جزئیات آرت
-                        detail_msg = await get_detail_msg(g_id, timeout=15)
-                        if detail_msg:
+                        # صفحه جزئیات رو پیدا می‌کنیم
+                        detail = await get_current_panel(g_id)
+                        if detail and ("🖼" in (detail.text or "") or "قیمت" in (detail.text or "")):
                             try:
-                                await client.forward_messages('me', detail_msg.id, g_id)
+                                await client.forward_messages('me', detail.id, g_id)
                                 print("✅ آرت فوروارد شد.")
                             except Exception as e:
                                 print(f"خطا در فوروارد: {e}")
-                            
                             # کلیک روی بازگشت
                             await click_btn(g_id, "بازگشت", timeout=10)
-                            # صبر برای برگشتن لیست مارکت
-                            await get_list_msg(g_id, timeout=10)
+                            await asyncio.sleep(3)
+                        else:
+                            # اگه صفحه جزئیات لود نشد، شاید ربات کرده، یه کم صبر کن
+                            await asyncio.sleep(2)
                             
                     except Exception as e:
                         print(f"خطا در کلیک دکمه: {e}")
-                    continue # میره سراغ بررسی دوباره همون صفحه برای بقیه آرت‌ها
+                    continue # میره سراغ بررسی دوباره (اول چک میکنه اگه تو صفحه آرت هست برش گردونه، بعدش میره سراغ بقیه)
                 
                 # ۵. اگه آرتی تو این صفحه پیدا نشد، بره صفحه بعد
                 if next_btn and art_active:
@@ -145,7 +138,7 @@ async def art_loop():
                         await next_btn.click()
                     except:
                         pass
-                    await get_list_msg(g_id, timeout=10) # صبر برای لود شدن صفحه جدید
+                    await asyncio.sleep(4) # صبر برای لود شدن صفحه جدید
                 else:
                     print("ℹ️ به انتهای مارکت رسیدیم. ۶۰ ثانیه دیگه دوباره چک میشه...")
                     break
