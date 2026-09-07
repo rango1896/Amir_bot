@@ -83,11 +83,11 @@ async def death_cycle_task():
         for _ in range(bandages):
             if not smart_active: return
             
-            # رعایت خنکی
-            if time.time() < shooting.cooldown_until:
-                wait_time = int(shooting.cooldown_until - time.time()) + 1
-                if wait_time > 0: await asyncio.sleep(wait_time)
-                shooting.cooldown_until = 0
+            # رعایت خنکی (چک کردن لحظه‌ای)
+            while time.time() < shooting.next_shoot_time:
+                await asyncio.sleep(1)
+                if not smart_active: return
+            shooting.next_shoot_time = 0
                 
             await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
             
@@ -106,7 +106,7 @@ async def death_cycle_task():
     except Exception as e:
         print(f"❌ خطا در چرخه مرگ: {e}")
     finally:
-        shooting.piou_shoot_active = True # مهم: جلوگیری از قفل شدن
+        shooting.piou_shoot_active = True
 
 async def refill_cycle_task():
     try:
@@ -119,11 +119,11 @@ async def refill_cycle_task():
             for _ in range(10):
                 if not smart_active: return
                 
-                # رعایت خنکی
-                if time.time() < shooting.cooldown_until:
-                    wait_time = int(shooting.cooldown_until - time.time()) + 1
-                    if wait_time > 0: await asyncio.sleep(wait_time)
-                    shooting.cooldown_until = 0
+                # رعایت خنکی (چک کردن لحظه‌ای)
+                while time.time() < shooting.next_shoot_time:
+                    await asyncio.sleep(1)
+                    if not smart_active: return
+                shooting.next_shoot_time = 0
                     
                 await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
                 
@@ -144,4 +144,4 @@ async def refill_cycle_task():
     except Exception as e:
         print(f"❌ خطا در چرخه بانداژ: {e}")
     finally:
-        shooting.piou_shoot_active = True # مهم: جلوگیری از قفل شدن
+        shooting.piou_shoot_active = True
