@@ -8,40 +8,31 @@ art_name = ""
 art_task = None
 
 async def log_to_chat(g_id, text):
-    """ارسال پیام خطا یا وضعیت به گروه برای اطلاع کاربر"""
     try:
         await client.send_message(g_id, text)
     except:
         pass
 
-async def get_bot_msg(g_id):
-    async for msg in client.iter_messages(g_id, limit=5):
+async def get_list_msg(g_id):
+    """پیدا کردن پیام لیست مارکت (پیامی که قیمت یا 🖼 توش نیست)"""
+    async for msg in client.iter_messages(g_id, limit=10):
         if msg.buttons and msg.sender and msg.sender.bot:
-            return msg
-    return None
-
-async def wait_for_list(g_id, timeout=15):
-    """صبر می‌کند تا لیست مارکت (پیامی بدون دکمه بازگشت) بیاید"""
-    for _ in range(timeout):
-        if not art_active: return None
-        await asyncio.sleep(1)
-        msg = await get_bot_msg(g_id)
-        if msg:
-            has_back = any("بازگشت" in btn.text for row in msg.buttons for btn in row)
-            if not has_back:
+            text = msg.text or ""
+            # پیام لیست رو تشخیص میدیم (پیام جزئیات نیست)
+            if "🖼" not in text and "قیمت" not in text:
                 return msg
     return None
 
-async def wait_for_detail(g_id, timeout=15):
-    """صبر می‌کند تا صفحه جزئیات آرت (پیامی با دکمه بازگشت) بیاید"""
+async def get_detail_msg(g_id, timeout=10):
+    """پیدا کردن پیام جزئیات آرت (پیامی که قیمت یا 🖼 داره)"""
     for _ in range(timeout):
         if not art_active: return None
         await asyncio.sleep(1)
-        msg = await get_bot_msg(g_id)
-        if msg:
-            has_back = any("بازگشت" in btn.text for row in msg.buttons for btn in row)
-            if has_back:
-                return msg
+        async for msg in client.iter_messages(g_id, limit=5):
+            if msg.sender and msg.sender.bot:
+                text = msg.text or ""
+                if "🖼" in text or "قیمت" in text:
+                    return msg
     return None
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیدا کردن آرت\s+(.+)$'))
@@ -73,7 +64,7 @@ async def art_loop():
             continue
             
         g_id = core.pio_active_group
-        clicked_texts = set()
+        clicked_ids = set() # یادگاری دکمه‌هایی که کلیک کردیم
             
         try:
             # ۱. ارسال پیو آرت
@@ -81,7 +72,7 @@ async def art_loop():
             await asyncio.sleep(5)
             
             # ۲. کلیک روی مارکت آرت
-            msg = await get_bot_msg(g_id)
+            msg = await get_list_msg(g_id)
             opened_market = False
             if msg:
                 for row in msg.buttons:
@@ -93,79 +84,58 @@ async def art_loop():
                     if opened_market: break
             
             if not opened_market:
-                await log_to_chat(g_id, "⚠️ گیر کردم: دکمه مارکت آرت پیدا نشد. ۶۰ ثانیه دیگه تلاش می‌کنم.")
+                await log_to_chat(g_id, "⚠️ گیر کردم: دکمه مارکت آرت پیدا نشد.")
                 await asyncio.sleep(60)
                 continue
                 
-            # ۳. صبر برای لود شدن لیست مارکت
-            list_msg = await wait_for_list(g_id)
-            if not list_msg:
-                await log_to_chat(g_id, "⚠️ گیر کردم: لیست مارکت باز نشد. دوباره تلاش می‌کنم.")
-                continue
+            await asyncio.sleep(5) # صبر برای لود شدن لیست
             
-            # ۴. چرخه صفحه‌بندی
+            # ۳. چرخه صفحه‌بندی
             while art_active:
-                list_msg = await get_bot_msg(g_id)
+                list_msg = await get_list_msg(g_id)
                 if not list_msg:
-                    await log_to_chat(g_id, "⚠️ گیر کردم: پیام لیست پیدا نشد.")
+                    await log_to_chat(g_id, "⚠️ گیر کردم: لیست مارکت پیدا نشد.")
                     break
                 
-                # پیدا کردن دکمه‌های آرت و دکمه صفحه بعد
                 target_btn = None
                 next_btn = None
                 
+                # پیدا کردن دکمه آرت و دکمه بعدی تو همین لیست
                 for row in list_msg.buttons:
                     for btn in row:
-                        txt = btn.text
-                        if art_name in txt and "مارکت" not in txt and "بعد" not in txt and "بازگشت" not in txt:
-                            if txt not in clicked_texts:
+                        btn_id = getattr(btn, 'data', btn.text)
+                        if art_name in btn.text and "مارکت" not in btn.text and "بعد" not in btn.text:
+                            if btn_id not in clicked_ids:
                                 target_btn = btn
-                        elif any(kw in txt for kw in ["بعد", "next", "›", "⏭", "برو", "➡️"]):
+                        elif any(kw in btn.text for kw in ["بعد", "next", "›", "⏭", "برو", "➡️"]):
                             next_btn = btn
                 
-                # ۵. اگه آرت پیدا شد، روش کلیک کن
+                # ۴. اگه آرت پیدا شد، روش کلیک کن
                 if target_btn:
-                    clicked_texts.add(target_btn.text)
+                    btn_id = getattr(target_btn, 'data', target_btn.text)
+                    clicked_ids.add(btn_id)
                     await target_btn.click()
-                    await asyncio.sleep(4)
+                    print(f"🔍 کلیک روی آرت: {target_btn.text}")
                     
-                    # صبر برای باز شدن صفحه جزئیات
-                    detail_msg = await wait_for_detail(g_id)
+                    # چون لیست پاک نمیشه، فقط صبر می‌کنیم تا پیام جزئیات بیاد
+                    detail_msg = await get_detail_msg(g_id, timeout=10)
                     if detail_msg:
                         try:
                             await client.forward_messages('me', detail_msg.id, g_id)
+                            print("✅ آرت فوروارد شد.")
                         except Exception as e:
                             await log_to_chat(g_id, f"⚠️ گیر کردم: فوروارد ارور داد: {e}")
-                        
-                        # کلیک روی دکمه بازگشت
-                        back_clicked = False
-                        for row in detail_msg.buttons:
-                            for btn in row:
-                                if "بازگشت" in btn.text:
-                                    await btn.click()
-                                    back_clicked = True
-                                    break
-                            if back_clicked: break
-                        
-                        # صبر برای برگشتن لیست مارکت
-                        await wait_for_list(g_id)
                     else:
-                        await log_to_chat(g_id, "⚠️ گیر کردم: صفحه جزئیات آرت لود نشد.")
+                        await log_to_chat(g_id, "⚠️ گیر کردم: پیام جزئیات آرت لود نشد.")
                     
-                    continue # برمی‌گردیم سراغ چک کردن لیست برای بقیه آرت‌ها
+                    # برمی‌گردیم به سراغ همون لیست برای کلیک روی آرت بعدی
+                    continue 
                 
-                # ۶. اگه آرتی تو این صفحه پیدا نشد، بره صفحه بعد
+                # ۵. اگه تو این لیست دیگه آرتی نبود، بره صفحه بعد
                 if next_btn and art_active:
-                    await log_to_chat(g_id, "➡️ رفتن به صفحه بعد مارکت...")
-                    try:
-                        await next_btn.click()
-                    except:
-                        pass
-                    # صبر برای لود شدن صفحه جدید
-                    new_list = await wait_for_list(g_id)
-                    if not new_list:
-                        await log_to_chat(g_id, "⚠️ گیر کردم: صفحه بعد لود نشد.")
-                        break
+                    print("➡️ رفتن به صفحه بعد...")
+                    await next_btn.click()
+                    await asyncio.sleep(5) # صبر برای لود شدن صفحه جدید
                 else:
                     await log_to_chat(g_id, "ℹ️ به انتهای مارکت رسیدیم. ۶۰ ثانیه دیگه چرخه رو از اول شروع می‌کنم.")
                     break
