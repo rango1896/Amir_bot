@@ -18,6 +18,7 @@ import misc
 import shooting
 import smart_shoot
 import multi_react
+import squad
 
 app = Flask(__name__)
 @app.route('/')
@@ -73,6 +74,7 @@ async def main():
     asyncio.ensure_future(shooting.blind_shot_loop())
     asyncio.ensure_future(shooting.piou_main_loop())
     asyncio.ensure_future(multi_react.start_multi_clients())
+    asyncio.ensure_future(squad.squad_loop())
     
     await core.client.run_until_disconnected()
 
