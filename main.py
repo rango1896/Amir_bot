@@ -29,6 +29,22 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=8080)
 
+# === دستور ترکیبی پیو همه روشن ===
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه روشن$'))
+async def pio_all_on(event):
+    g_id = event.chat_id
+    # ۱. پیو روشن
+    await client.send_message(g_id, "پیو روشن")
+    await asyncio.sleep(3)
+    # ۲. بانداژ روشن
+    await client.send_message(g_id, "بانداژ روشن")
+    await asyncio.sleep(3)
+    # ۳. هوشمند روشن
+    await client.send_message(g_id, "هوشمند روشن")
+    await asyncio.sleep(4)
+    # ۴. اسکواد روشن
+    await client.send_message(g_id, "اسکواد روشن")
+
 # === دستور روشن کردن همه قابلیت‌ها ===
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^روشن همه$'))
 async def turn_on_all(event):
@@ -40,19 +56,15 @@ async def turn_on_all(event):
     core.ghost_mode_active = True
     smart_shoot.smart_active = True
     
-    # روشن کردن کارخونه
     if not core.factory_active:
         core.factory_active = True
         asyncio.ensure_future(factory.factory_cycle())
         
-    # روشن کردن واکنش خودکار
     if hasattr(reactions, 'react_active'):
         reactions.react_active = True
 
-    # روشن کردن پیو
     shooting.piou_active = True
-
-    await event.reply("✅ تمام قابلیت‌های ربات (شبح، ضدحذف، هشدار، گربه‌ها، پوینت، ماهیگیری، کارخونه، واکنش و پیو) **روشن** شدند!")
+    await event.reply("✅ تمام قابلیت‌های ربات **روشن** شدند!")
 
 async def main():
     await core.client.start()
