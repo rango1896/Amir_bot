@@ -50,11 +50,12 @@ async def squad_loop():
                                             await btn.click()
                                             print("✅ استخراج گان پوینت انجام شد!")
                                             extracted = True
-                                            break
-                                    if extracted: break
-                                if extracted: break
-                            if extracted: break
-                    if extracted: break
+                                        except Exception as e:
+                                            print(f"خطا در کلیک دکمه: {e}")
+                                        break # خروج از حلقه دکمه‌ها
+                                if extracted: break # خروج از حلقه ردیف‌ها
+                        if extracted: break # خروج از حلقه پیام‌ها
+                    if extracted: break # خروج از حلقه زمان
                     
                 if not extracted and squad_active:
                     print("⚠️ دکمه استخراج تو ۲ دقیقه پیدا نشد.")
