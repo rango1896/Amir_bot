@@ -11,7 +11,7 @@ piou_active = False
 piou_shoot_active = True
 last_meat_time = 0
 shoot_interval = 60
-cooldown_until = 0
+next_shoot_time = 0
 skip_next_heal = False
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم تیر\s+(\d+)$'))
@@ -86,22 +86,17 @@ async def remove_group(event):
 # --- شنود پیام‌های ربات بازی برای خنکی و خون ---
 @client.on(events.NewMessage(incoming=True))
 async def game_state_listener(event):
-    global cooldown_until, skip_next_heal
+    global next_shoot_time, skip_next_heal
     if not core.pio_active_group or event.chat_id != core.pio_active_group: return
     text = event.message.text or ""
     
     # ۱. تشخیص خنکی شلیک
     if "تازه شلیک کردی" in text and "صبر کن" in text:
         match = re.search(r'(\d+)\s*ثانی', text)
-        match_min = re.search(r'(\d+)\s*دقیق', text)
         if match:
             secs = int(match.group(1))
-            cooldown_until = time.time() + secs
-            await client.send_message(event.chat_id, f"⏳ {secs} ثانیه دیگه دوباره شلیک میکنم.")
-        elif match_min:
-            secs = int(match_min.group(1)) * 60
-            cooldown_until = time.time() + secs
-            await client.send_message(event.chat_id, f"⏳ {secs} ثانیه دیگه دوباره شلیک میکنم.")
+            next_shoot_time = time.time() + secs
+            print(f"⏳ خنکی شلیک: {secs} ثانیه صبر میکنم")
             
     # ۲. تشخیص خون پر
     elif "نیازی به هیل نیست" in text and "کامله" in text:
@@ -126,7 +121,7 @@ async def blind_shot_loop():
         else: await asyncio.sleep(5)
 
 async def piou_main_loop():
-    global ammo_counter, cooldown_until, skip_next_heal
+    global ammo_counter, next_shoot_time, skip_next_heal
     while True:
         if piou_active and piou_shoot_active and core.pio_active_group:
             try:
@@ -134,15 +129,10 @@ async def piou_main_loop():
                     g_id = core.pio_active_group
                     m_id = core.pio_target_links.get(g_id, 18)
                     
-                    # چک کردن خنکی شلیک (اصلاح شده)
-                    if time.time() < cooldown_until:
-                        wait_time = int(cooldown_until - time.time()) + 1
-                        if wait_time > 0:
-                            for _ in range(wait_time):
-                                if not piou_active or not piou_shoot_active or not core.pio_active_group: break
-                                await asyncio.sleep(1)
-                        cooldown_until = 0
-                        if not piou_active or not piou_shoot_active: continue
+                    # چک کردن زمان شلیک بعدی (هر ۱ ثانیه چک میکنه تا دقیق بیدار بشه)
+                    if time.time() < next_shoot_time:
+                        await asyncio.sleep(1)
+                        continue
                     
                     # ۱. شلیک
                     await client.send_message(g_id, "شلیک", reply_to=m_id); ammo_counter += 1
@@ -157,10 +147,8 @@ async def piou_main_loop():
                         
                     if ammo_counter % ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                     
-                    # ۳. صبر کردن به اندازه زمان تنظیم شده
-                    for _ in range(shoot_interval):
-                        if not piou_active or not piou_shoot_active or not core.pio_active_group: break
-                        await asyncio.sleep(1)
+                    # ۳. تنظیم زمان شلیک بعدی (پیش‌فرض ۶۰ ثانیه)
+                    next_shoot_time = time.time() + shoot_interval
             except: await asyncio.sleep(10)
         else: await asyncio.sleep(1)
 
