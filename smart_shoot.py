@@ -81,12 +81,12 @@ async def death_cycle_task():
         await client.send_message(g_id, f"تعداد بانداژ ها محاسبه شد ({bandages} تا)")
         await asyncio.sleep(death_seconds + 2)
         for _ in range(bandages):
-            if not smart_active: shooting.piou_shoot_active = True; return
+            if not smart_active: return
             
             # رعایت خنکی
             if time.time() < shooting.cooldown_until:
                 wait_time = int(shooting.cooldown_until - time.time()) + 1
-                await asyncio.sleep(wait_time)
+                if wait_time > 0: await asyncio.sleep(wait_time)
                 shooting.cooldown_until = 0
                 
             await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
@@ -101,8 +101,12 @@ async def death_cycle_task():
                 
             if shooting.ammo_counter % shooting.ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
             await asyncio.sleep(20)
-        shooting.piou_shoot_active = True
-    except asyncio.CancelledError: return
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print(f"❌ خطا در چرخه مرگ: {e}")
+    finally:
+        shooting.piou_shoot_active = True # مهم: جلوگیری از قفل شدن
 
 async def refill_cycle_task():
     try:
@@ -110,15 +114,15 @@ async def refill_cycle_task():
         g_id = core.pio_active_group; m_id = core.pio_target_links.get(g_id, 18)
         await client.send_message(g_id, "حالت جعبه کمک اولیه فعال شد")
         await asyncio.sleep(refill_seconds + 2)
-        if not smart_active: shooting.piou_shoot_active = True; return
+        if not smart_active: return
         while smart_active:
             for _ in range(10):
-                if not smart_active: shooting.piou_shoot_active = True; return
+                if not smart_active: return
                 
                 # رعایت خنکی
                 if time.time() < shooting.cooldown_until:
                     wait_time = int(shooting.cooldown_until - time.time()) + 1
-                    await asyncio.sleep(wait_time)
+                    if wait_time > 0: await asyncio.sleep(wait_time)
                     shooting.cooldown_until = 0
                     
                 await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
@@ -133,6 +137,11 @@ async def refill_cycle_task():
                     
                 if shooting.ammo_counter % shooting.ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                 await asyncio.sleep(20)
-            if not smart_active: shooting.piou_shoot_active = True; return
+            if not smart_active: return
             await asyncio.sleep(360)
-    except asyncio.CancelledError: return
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print(f"❌ خطا در چرخه بانداژ: {e}")
+    finally:
+        shooting.piou_shoot_active = True # مهم: جلوگیری از قفل شدن
