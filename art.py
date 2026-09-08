@@ -15,7 +15,8 @@ async def log_to_chat(g_id, text):
 
 async def get_list_msg(g_id):
     """پیدا کردن پیام لیست مارکت (پیامی که قیمت یا 🖼 توش نیست)"""
-    async for msg in client.iter_messages(g_id, limit=10):
+    # limit رو گذاشتم روی 20 تا اگه چند تا پیام دیگه اومد لیست گم نشه
+    async for msg in client.iter_messages(g_id, limit=20):
         if msg.buttons and msg.sender and msg.sender.bot:
             text = msg.text or ""
             # پیام لیست رو تشخیص میدیم (پیام جزئیات نیست)
@@ -94,8 +95,9 @@ async def art_loop():
             while art_active:
                 list_msg = await get_list_msg(g_id)
                 if not list_msg:
-                    await log_to_chat(g_id, "⚠️ گیر کردم: لیست مارکت پیدا نشد.")
-                    break
+                    # تعمیر مشکل: اگه لیست پیدا نشد، از اول شروع نکن، فقط ۳ ثانیه صبر کن و دوباره چک کن
+                    await asyncio.sleep(3)
+                    continue
                 
                 target_btn = None
                 next_btn = None
