@@ -15,8 +15,8 @@ async def log_to_chat(g_id, text):
 
 async def get_list_msg(g_id):
     """پیدا کردن پیام لیست مارکت (پیامی که قیمت یا 🖼 توش نیست)"""
-    # limit رو گذاشتم روی 20 تا اگه چند تا پیام دیگه اومد لیست گم نشه
-    async for msg in client.iter_messages(g_id, limit=20):
+    # پیام‌ها رو از جدیدترین به قدیمی می‌خونه و limit رو گذاشتم روی ۱۰۰۰ تا تو گپ‌های شلوغ گم نشه
+    async for msg in client.iter_messages(g_id, limit=1000):
         if msg.buttons and msg.sender and msg.sender.bot:
             text = msg.text or ""
             # پیام لیست رو تشخیص میدیم (پیام جزئیات نیست)
@@ -29,7 +29,7 @@ async def get_detail_msg(g_id, timeout=10):
     for _ in range(timeout):
         if not art_active: return None
         await asyncio.sleep(1)
-        async for msg in client.iter_messages(g_id, limit=5):
+        async for msg in client.iter_messages(g_id, limit=1000):
             if msg.sender and msg.sender.bot:
                 text = msg.text or ""
                 if "🖼" in text or "قیمت" in text:
@@ -95,7 +95,7 @@ async def art_loop():
             while art_active:
                 list_msg = await get_list_msg(g_id)
                 if not list_msg:
-                    # تعمیر مشکل: اگه لیست پیدا نشد، از اول شروع نکن، فقط ۳ ثانیه صبر کن و دوباره چک کن
+                    # اگه لیست پیدا نشد، از اول شروع نکن، فقط ۳ ثانیه صبر کن و دوباره چک کن
                     await asyncio.sleep(3)
                     continue
                 
@@ -135,9 +135,32 @@ async def art_loop():
                 
                 # ۵. اگه تو این لیست دیگه آرتی نبود، بره صفحه بعد
                 if next_btn and art_active:
-                    print("➡️ رفتن به صفحه بعد...")
-                    await next_btn.click()
-                    await asyncio.sleep(5) # صبر برای لود شدن صفحه جدید
+                    print("➡️ تلاش برای رفتن به صفحه بعد...")
+                    old_list_id = list_msg.id
+                    
+                    # سیستم تلاش مجدد برای دکمه بعدی
+                    clicked_next_successfully = False
+                    for _ in range(10): # ۱۰ بار تلاش می‌کنه (هر بار ۳ ثانیه)
+                        if not art_active: break
+                        try:
+                            await next_btn.click()
+                        except:
+                            pass # اگه کلیک ارور داد، دوباره تلاش می‌کنیم
+                        
+                        await asyncio.sleep(3) # ۳ ثانیه صبر برای لود شدن لیست جدید
+                        
+                        new_list_msg = await get_list_msg(g_id)
+                        # اگه پیام لیست عوض شد، یعنی صفحه بعد لود شده
+                        if new_list_msg and new_list_msg.id != old_list_id:
+                            print("✅ صفحه بعد لود شد.")
+                            clicked_next_successfully = True
+                            break
+                        else:
+                            print("⏳ لیست عوض نشد، دوباره روی بعدی کلیک می‌کنم...")
+                    
+                    if not clicked_next_successfully:
+                        await log_to_chat(g_id, "ℹ️ به انتهای مارکت رسیدیم یا ربات بازی جواب نمیده. ۶۰ ثانیه دیگه چرخه رو از اول شروع می‌کنم.")
+                        break
                 else:
                     await log_to_chat(g_id, "ℹ️ به انتهای مارکت رسیدیم. ۶۰ ثانیه دیگه چرخه رو از اول شروع می‌کنم.")
                     break
