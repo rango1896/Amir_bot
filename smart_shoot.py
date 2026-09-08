@@ -83,11 +83,11 @@ async def death_cycle_task():
         for _ in range(bandages):
             if not smart_active: return
             
-            # رعایت خنکی (چک کردن لحظه‌ای)
+            # رعایت خنکی شلیک (چک کردن لحظه‌ای)
             while time.time() < shooting.next_shoot_time:
                 await asyncio.sleep(1)
                 if not smart_active: return
-            shooting.next_shoot_time = 0
+            shooting.next_shoot_time = 0  # ریست کردن زمان خنکی بعد از صبر کردن
                 
             await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
             
@@ -100,7 +100,9 @@ async def death_cycle_task():
                 await asyncio.sleep(1)
                 
             if shooting.ammo_counter % shooting.ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
-            await asyncio.sleep(20)
+            
+            # تنظیم زمان شلیک بعدی (طبق تنظیم شما)
+            shooting.next_shoot_time = time.time() + shooting.shoot_interval
     except asyncio.CancelledError:
         pass
     except Exception as e:
@@ -119,11 +121,11 @@ async def refill_cycle_task():
             for _ in range(10):
                 if not smart_active: return
                 
-                # رعایت خنکی (چک کردن لحظه‌ای)
+                # رعایت خنکی شلیک (چک کردن لحظه‌ای)
                 while time.time() < shooting.next_shoot_time:
                     await asyncio.sleep(1)
                     if not smart_active: return
-                shooting.next_shoot_time = 0
+                shooting.next_shoot_time = 0  # ریست کردن زمان خنکی
                     
                 await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
                 
@@ -136,7 +138,9 @@ async def refill_cycle_task():
                     await asyncio.sleep(1)
                     
                 if shooting.ammo_counter % shooting.ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
-                await asyncio.sleep(20)
+                
+                # تنظیم زمان شلیک بعدی (طبق تنظیم شما)
+                shooting.next_shoot_time = time.time() + shooting.shoot_interval
             if not smart_active: return
             await asyncio.sleep(360)
     except asyncio.CancelledError:
