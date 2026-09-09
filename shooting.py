@@ -70,7 +70,7 @@ async def add_group(event):
         else: await event.reply("❗ اول `اد لینک` بزن.")
     except: await event.reply("❗ گروه پیدا نشد.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد گروه$')
+@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد گروه$'))
 async def remove_group(event):
     if core.pio_active_group in core.pio_target_links:
         del core.pio_target_links[core.pio_active_group]
@@ -156,7 +156,7 @@ async def piou_main_loop():
             except: await asyncio.sleep(10)
         else: await asyncio.sleep(1)
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$')
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$'))
 async def piou_on(event):
     global piou_active, last_meat_time
     if not piou_active:
@@ -165,7 +165,7 @@ async def piou_on(event):
         piou_active = True; last_meat_time = 0
         await event.reply("🔫 سیستم پیو **روشن** شد.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$')
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$'))
 async def piou_off(event):
     global piou_active; piou_active = False
     await event.reply("🛑 سیستم پیو **خاموش** شد.")
