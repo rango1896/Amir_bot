@@ -38,7 +38,7 @@ TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 DB_PIOU_TAG = "#DB_PIOU"
 pio_active_group = None
 pio_target_links = {}
-
+pio_cooldown_until = 0  # متغیر جدید برای سیستم خنکی
 # === توابع کمکی ===
 def fa_to_en_digits(text):
     persian_digits = '۰۱۲۳۴۵۶۷۸۹'
