@@ -85,25 +85,21 @@ async def game_state_listener(event):
     if not core.pio_active_group or event.chat_id != core.pio_active_group: return
     text = event.message.text or ""
     
-    # ۱. تشخیص خنکی شلیک
+    # ۱. تشخیص خنکی شلیک (برای همه پیام‌ها، بدون نیاز به ریپلای)
     if "تازه شلیک کردی" in text and "ثانی" in text:
-        try:
-            # فقط اگه روی پیام ما ریپلای کرده باشه
-            if event.message.is_reply:
-                replied_msg = await event.message.get_reply_message()
-                me = await client.get_me()
-                if replied_msg and replied_msg.sender_id == me.id:
-                    match = re.search(r'(\d+)\s*ثانی', text)
-                    if match:
-                        secs = int(match.group(1))
-                        new_time = time.time() + secs + 1
-                        if new_time > next_shoot_time:
-                            next_shoot_time = new_time
-        except: pass
+        match = re.search(r'(\d+)\s*ثانی', text)
+        if match:
+            secs = int(match.group(1))
+            new_time = time.time() + secs + 1  # ۱ ثانیه امنیت
+            # اگه زمان جدید بیشتر از زمان فعلیه، آپدیت میکنه
+            if new_time > next_shoot_time:
+                next_shoot_time = new_time
+                print(f"⏳ خنکی شلیک: {secs} ثانیه صبر میکنم")
             
     # ۲. تشخیص خون پر
     elif "نیازی به هیل نیست" in text and "کامله" in text:
         skip_next_heal = True
+        print("❤️ خون پر بود، شلیک بعدی پیو هیل نمیخوره")
 
 async def meat_loop():
     global last_meat_time
