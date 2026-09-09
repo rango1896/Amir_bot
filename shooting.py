@@ -19,7 +19,7 @@ async def set_ammo_limit(event):
     ammo_limit = int(event.pattern_match.group(1))
     await event.reply(f"✅ تنظیمات خرید مهمات تغییر کرد. از این به بعد هر {ammo_limit} شلیک، یک خرید مهمات انجام میشه.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم زمان شلیک\s+(\d+)$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم زمان شلیق\s+(\d+)$'))
 async def set_shoot_interval(event):
     global shoot_interval
     shoot_interval = int(event.pattern_match.group(1))
@@ -83,7 +83,6 @@ async def game_state_listener(event):
     global skip_next_heal
     if not core.pio_active_group or event.chat_id != core.pio_active_group: return
     text = event.message.text or ""
-    
     if "نیازی به هیل نیست" in text and "کامله" in text:
         skip_next_heal = True
 
@@ -114,12 +113,12 @@ async def piou_main_loop():
                     g_id = core.pio_active_group
                     m_id = core.pio_target_links.get(g_id, 18)
                     
-                    # ۱. چک کردن خنکی شلیک (اگه ربات گفت صبر کن، اینجا گیر میکنه)
-                    while time.time() < core.pio_cooldown_until:
+                    # ۱. صبر کردن تا زمان شلیک بعدی (هر ۱ ثانیه چک میشه)
+                    # اگه ربات وسط این صبر گفت "۴ ثانیه صبر کن"، خودبه‌خود این زمان آپدیت میشه و ربات سراغ شلیک نمیره
+                    while time.time() < core.next_shoot_time:
                         if not piou_active or not piou_shoot_active or not core.pio_active_group: break
                         await asyncio.sleep(1)
                     if not piou_active or not piou_shoot_active: continue
-                    core.pio_cooldown_until = 0  # ریست کردن خنکی
                     
                     # ۲. شلیک
                     await client.send_message(g_id, "شلیک", reply_to=m_id); ammo_counter += 1
@@ -134,13 +133,10 @@ async def piou_main_loop():
                         
                     if ammo_counter % ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                     
-                    # ۴. صبر کردن به اندازه زمان تنظیم شده (پیش‌فرض ۳۰ ثانیه)
-                    # این صبر به صورت ۱ ثانیه‌ای چک میشه تا اگه ربات وسطش گفت صبر کن، درجا متوقف بشه
-                    wait_until = time.time() + shoot_interval
-                    while time.time() < wait_until:
-                        if not piou_active or not piou_shoot_active or not core.pio_active_group: break
-                        if time.time() < core.pio_cooldown_until: break # اگه خنکی فعال شد، خواب رو بشکن
-                        await asyncio.sleep(1)
+                    # ۴. تنظیم زمان شلیک بعدی (پیش‌فرض ۳۰ ثانیه)
+                    # نکته مهم: اگه ربات بازی تو این ۵ ثانیه گفته باشه صبر کن، این ۳۰ ثانیه جایگزین نمیشه!
+                    if time.time() >= core.next_shoot_time:
+                        core.next_shoot_time = time.time() + shoot_interval
             except: await asyncio.sleep(10)
         else: await asyncio.sleep(1)
 
