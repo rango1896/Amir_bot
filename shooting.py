@@ -11,7 +11,7 @@ piou_active = False
 piou_shoot_active = True
 last_meat_time = 0
 shoot_interval = 30
-next_shoot_time = 0  # متغیر جدید برای مدیریت دقیق زمان
+next_shoot_time = 0
 skip_next_heal = False
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم تیر\s+(\d+)$'))
@@ -24,7 +24,7 @@ async def set_ammo_limit(event):
 async def set_shoot_interval(event):
     global shoot_interval
     shoot_interval = int(event.pattern_match.group(1))
-    await event.reply(f"✅ زمان‌بندی شلیک تغییر کرد. از این به بعد هر {shoot_interval} ثانیه یک‌بار شلیک و ۵ ثانیه بعدش پیو هیل فرستاده میشه.")
+    await event.reply(f"✅ زمان‌بندی شلیک تغییر شد. از این به بعد هر {shoot_interval} ثانیه یک‌بار شلیک میشه.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد لینک\s+(\S+)$'))
 async def add_link(event):
@@ -36,7 +36,7 @@ async def add_link(event):
                 g_id = int("-100" + parts[0]); m_id = int(parts[1])
                 core.pio_target_links[g_id] = m_id; core.pio_active_group = g_id
                 await core.save_pio_db()
-                await event.reply(f"✅ لینک ثبت شد. شلیک‌ها روی پیام `{m_id}` انجام میشه.")
+                await event.reply(f"✅ لینک ثبت شد.")
             else: await event.reply("❗ فرمت لینک اشتباه است.")
         else:
             parts = link.split("t.me/")[-1].split("/")
@@ -46,7 +46,7 @@ async def add_link(event):
                 m_id = int(parts[1])
                 core.pio_target_links[g_id] = m_id; core.pio_active_group = g_id
                 await core.save_pio_db()
-                await event.reply(f"✅ لینک ثبت شد. شلیک‌ها روی پیام `{m_id}` انجام میشه.")
+                await event.reply(f"✅ لینک ثبت شد.")
             else: await event.reply("❗ فرمت لینک اشتباه است.")
     except: await event.reply("❗ خطا در ثبت لینک.")
 
@@ -56,26 +56,21 @@ async def remove_link(event):
         del core.pio_target_links[core.pio_active_group]
     core.pio_active_group = None
     await core.save_pio_db()
-    await event.reply("✅ لینک پاک شد. ربات متوقف شد تا لینک جدید بدی.")
+    await event.reply("✅ لینک پاک شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد گروه\s+(.+)$'))
 async def add_group(event):
     g_str = event.pattern_match.group(1)
     try:
-        if g_str.lstrip('-').isdigit():
-            g_id = int(g_str)
-        else:
-            ent = await client.get_entity(g_str)
-            g_id = utils.get_peer_id(ent)
-            
+        g_id = int(g_str) if g_str.lstrip('-').isdigit() else utils.get_peer_id(await client.get_entity(g_str))
         if g_id in core.pio_target_links:
             core.pio_active_group = g_id
             await core.save_pio_db()
-            await event.reply(f"✅ گروه فعال شد. شلیک روی پیام `{core.pio_target_links[g_id]}`.")
-        else: await event.reply("❗ برای این گروه هنوز لینکی ثبت نشده. اول `اد لینک` بزن.")
+            await event.reply(f"✅ گروه فعال شد.")
+        else: await event.reply("❗ اول `اد لینک` بزن.")
     except: await event.reply("❗ گروه پیدا نشد.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد گروه$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد گروه$')
 async def remove_group(event):
     if core.pio_active_group in core.pio_target_links:
         del core.pio_target_links[core.pio_active_group]
@@ -83,30 +78,27 @@ async def remove_group(event):
     await core.save_pio_db()
     await event.reply("✅ گروه فعلی حذف شد.")
 
-# --- شنود هوشمند پیام‌های ربات بازی ---
+# --- شنود پیام‌های ربات بازی برای خنکی و خون ---
 @client.on(events.NewMessage(incoming=True))
 async def game_state_listener(event):
     global next_shoot_time, skip_next_heal
     if not core.pio_active_group or event.chat_id != core.pio_active_group: return
     text = event.message.text or ""
     
-    # ۱. تشخیص خنکی شلیک (فقط اگه روی پیام "شلیک" خودمون ریپلای کرده باشه)
-    if "تازه شلیک کردی" in text and "ثانی" in text and event.message.is_reply:
+    # ۱. تشخیص خنکی شلیک
+    if "تازه شلیک کردی" in text and "ثانی" in text:
         try:
-            replied_msg = await event.message.get_reply_message()
-            me = await client.get_me()
-            # مطمئن میشیم که پیام شلیک مال خودمونه
-            if replied_msg and replied_msg.sender_id == me.id and (replied_msg.text or "").strip() == "شلیک":
-                match = re.search(r'(\d+)\s*ثانی', text)
-                if match:
-                    secs = int(match.group(1))
-                    new_time = time.time() + secs + 1  # ۱ ثانیه امنیت اضافه میکنیم
-                    # فقط اگه زمان جدید از زمان قبلی بیشتر باشه آپدیت میکنیم
-                    if new_time > next_shoot_time:
-                        next_shoot_time = new_time
-                        try:
-                            await client.send_message(event.chat_id, f"⏳ {secs} ثانیه دیگه شلیک میکنم.")
-                        except: pass
+            # فقط اگه روی پیام ما ریپلای کرده باشه
+            if event.message.is_reply:
+                replied_msg = await event.message.get_reply_message()
+                me = await client.get_me()
+                if replied_msg and replied_msg.sender_id == me.id:
+                    match = re.search(r'(\d+)\s*ثانی', text)
+                    if match:
+                        secs = int(match.group(1))
+                        new_time = time.time() + secs + 1
+                        if new_time > next_shoot_time:
+                            next_shoot_time = new_time
         except: pass
             
     # ۲. تشخیص خون پر
@@ -140,7 +132,7 @@ async def piou_main_loop():
                     g_id = core.pio_active_group
                     m_id = core.pio_target_links.get(g_id, 18)
                     
-                    # چک کردن زمان شلیک بعدی (هر ۱ ثانیه بیدار میشه)
+                    # چک کردن زمان شلیک بعدی (هر ۱ ثانیه چک میکنه)
                     while time.time() < next_shoot_time:
                         if not piou_active or not piou_shoot_active or not core.pio_active_group: break
                         await asyncio.sleep(1)
@@ -164,16 +156,16 @@ async def piou_main_loop():
             except: await asyncio.sleep(10)
         else: await asyncio.sleep(1)
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$')
 async def piou_on(event):
     global piou_active, last_meat_time
     if not piou_active:
         if not core.pio_active_group:
-            return await event.reply("❗ اول با دستور `اد لینک` یه پیام هدف ثبت کن!")
+            return await event.reply("❗ اول `اد لینک` بزن!")
         piou_active = True; last_meat_time = 0
         await event.reply("🔫 سیستم پیو **روشن** شد.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$'))
+@client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$')
 async def piou_off(event):
     global piou_active; piou_active = False
     await event.reply("🛑 سیستم پیو **خاموش** شد.")
