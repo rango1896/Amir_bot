@@ -1,4 +1,3 @@
-
 import asyncio
 import re
 import time
@@ -15,13 +14,16 @@ refill_seconds = 0
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هوشمند روشن$'))
 async def smart_on(event):
-    global smart_active, current_task
+    global smart_active
     if not smart_active:
         if not core.pio_active_group:
             return await event.reply("❗ اول با دستور `اد لینک` یه پیام هدف ثبت کن!")
         smart_active = True
         await event.reply("🧠 سیستم شلیک هوشمند **روشن** شد.")
-        if current_task is None or current_task.done(): current_task = asyncio.create_task(asyncio.sleep(0))
+        # FIX(F7): تسک ساختگی asyncio.create_task(asyncio.sleep(0)) حذف شد —
+        # هیچ کاری انجام نمیداد، فقط current_task را غیرضروری "مقداردهی" میکرد.
+        # current_task همچنان None باقی می‌ماند تا اولین رویداد واقعی
+        # (مرگ/بانداژ) در game_listener آن را بسازد.
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هوشمند خاموش$'))
 async def smart_off(event):
@@ -45,7 +47,7 @@ async def refill_off(event):
 async def game_listener(event):
     global smart_active, death_seconds, refill_seconds, current_task, refill_active
     if not smart_active or event.chat_id != core.pio_active_group: return
-    
+
     text = event.message.text or ""
     if "مرده" in text and "زنده" in text and "تا" in text:
         seconds = 0
@@ -69,7 +71,12 @@ async def game_listener(event):
 async def death_cycle_task():
     try:
         shooting.piou_shoot_active = False
-        g_id = core.pio_active_group; m_id = core.pio_target_links.get(g_id, 18)
+        g_id = core.pio_active_group
+        m_id = core.pio_target_links.get(g_id)
+        # FIX(F4): پیش‌فرض جادویی ۱۸ حذف شد
+        if m_id is None:
+            print("❌ چرخه مرگ متوقف شد: پیام هدفی برای این گروه ثبت نشده.")
+            return
         await client.send_message(g_id, "حالت مرده فعال شد")
         my_msg = await client.send_message(g_id, "پیو من")
         bandages = 0
@@ -83,15 +90,15 @@ async def death_cycle_task():
         await asyncio.sleep(death_seconds + 2)
         for _ in range(bandages):
             if not smart_active: return
-            
+
             # رعایت خنکی شلیک (چک کردن لحظه‌ای)
             while time.time() < shooting.next_shoot_time:
                 await asyncio.sleep(1)
                 if not smart_active: return
             shooting.next_shoot_time = 0  # ریست کردن زمان خنکی بعد از صبر کردن
-                
+
             await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
-            
+
             # رعایت خون پر
             if not shooting.skip_next_heal:
                 await asyncio.sleep(2)
@@ -99,9 +106,11 @@ async def death_cycle_task():
             else:
                 shooting.skip_next_heal = False
                 await asyncio.sleep(1)
-                
-            if shooting.ammo_counter % shooting.ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
-            
+
+            # FIX(F2): گارد دفاعی در برابر تقسیم بر صفر
+            if shooting.ammo_limit > 0 and shooting.ammo_counter % shooting.ammo_limit == 0:
+                await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
+
             # تنظیم زمان شلیک بعدی (طبق تنظیم شما)
             shooting.next_shoot_time = time.time() + shooting.shoot_interval
     except asyncio.CancelledError:
@@ -114,22 +123,27 @@ async def death_cycle_task():
 async def refill_cycle_task():
     try:
         shooting.piou_shoot_active = False
-        g_id = core.pio_active_group; m_id = core.pio_target_links.get(g_id, 18)
+        g_id = core.pio_active_group
+        m_id = core.pio_target_links.get(g_id)
+        # FIX(F4): پیش‌فرض جادویی ۱۸ حذف شد
+        if m_id is None:
+            print("❌ چرخه بانداژ متوقف شد: پیام هدفی برای این گروه ثبت نشده.")
+            return
         await client.send_message(g_id, "حالت جعبه کمک اولیه فعال شد")
         await asyncio.sleep(refill_seconds + 2)
         if not smart_active: return
         while smart_active:
             for _ in range(10):
                 if not smart_active: return
-                
+
                 # رعایت خنکی شلیک (چک کردن لحظه‌ای)
                 while time.time() < shooting.next_shoot_time:
                     await asyncio.sleep(1)
                     if not smart_active: return
                 shooting.next_shoot_time = 0  # ریست کردن زمان خنکی
-                    
+
                 await client.send_message(g_id, "شلیک", reply_to=m_id); shooting.ammo_counter += 1
-                
+
                 # رعایت خون پر
                 if not shooting.skip_next_heal:
                     await asyncio.sleep(2)
@@ -137,9 +151,11 @@ async def refill_cycle_task():
                 else:
                     shooting.skip_next_heal = False
                     await asyncio.sleep(1)
-                    
-                if shooting.ammo_counter % shooting.ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
-                
+
+                # FIX(F2): گارد دفاعی در برابر تقسیم بر صفر
+                if shooting.ammo_limit > 0 and shooting.ammo_counter % shooting.ammo_limit == 0:
+                    await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
+
                 # تنظیم زمان شلیک بعدی (طبق تنظیم شما)
                 shooting.next_shoot_time = time.time() + shooting.shoot_interval
             if not smart_active: return
@@ -150,3 +166,4 @@ async def refill_cycle_task():
         print(f"❌ خطا در چرخه بانداژ: {e}")
     finally:
         shooting.piou_shoot_active = True
+match_sec.group
