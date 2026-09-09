@@ -21,7 +21,7 @@ import multi_react
 import squad
 import art
 import cooldown
-
+import stealer
 app = Flask(__name__)
 @app.route('/')
 def home():
