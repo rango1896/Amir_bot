@@ -19,7 +19,8 @@ async def set_ammo_limit(event):
     ammo_limit = int(event.pattern_match.group(1))
     await event.reply(f"✅ تنظیمات خرید مهمات تغییر کرد. از این به بعد هر {ammo_limit} شلیک، یک خرید مهمات انجام میشه.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم زمان شلیق\s+(\d+)$'))
+# اصلاح غلط املایی: شلیق -> شلیک
+@client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم زمان شلیک\s+(\d+)$'))
 async def set_shoot_interval(event):
     global shoot_interval
     shoot_interval = int(event.pattern_match.group(1))
