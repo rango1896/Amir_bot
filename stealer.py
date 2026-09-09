@@ -1,3 +1,4 @@
+import os
 from telethon import events
 import core
 from core import client
@@ -16,9 +17,18 @@ async def steal_and_send(target_msg, event):
             
         caption = f"🥷 **دزدی شد!**\n👤 فرستنده: {sender_name}"
         
-        # ۱. اگه پیام فایل/عکس/استیکر/ویس داشت (دور زدن محدودیت فوروارد)
+        # ۱. اگه پیام فایل/عکس/استیکر/ویس داشت (دانلود واقعی و آپلود مجدد برای دور زدن قفل)
         if target_msg.media:
-            await client.send_file('me', file=target_msg.media, caption=caption)
+            # فایل رو تو حافظه موقت سرور دانلود می‌کنه
+            file_path = await client.download_media(target_msg.media)
+            if file_path:
+                # فایل رو به صورت یه پیام جدید می‌فرسته
+                await client.send_file('me', file=file_path, caption=caption)
+                # فایل رو از حافظه پاک می‌کنه تا سرور شلوغ نشه
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            else:
+                await event.reply("❗ فایل قابل دانلود نیست.")
             
         # ۲. اگه پیام فقط متن داشت
         elif target_msg.text:
