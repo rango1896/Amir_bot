@@ -10,8 +10,8 @@ ammo_limit = 9
 piou_active = False
 piou_shoot_active = True
 last_meat_time = 0
-shoot_interval = 60
-next_shoot_time = 0
+shoot_interval = 30
+next_shoot_time = 0  # متغیر جدید برای مدیریت دقیق زمان
 skip_next_heal = False
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم تیر\s+(\d+)$'))
@@ -83,20 +83,31 @@ async def remove_group(event):
     await core.save_pio_db()
     await event.reply("✅ گروه فعلی حذف شد.")
 
-# --- شنود پیام‌های ربات بازی برای خنکی و خون ---
+# --- شنود هوشمند پیام‌های ربات بازی ---
 @client.on(events.NewMessage(incoming=True))
 async def game_state_listener(event):
     global next_shoot_time, skip_next_heal
     if not core.pio_active_group or event.chat_id != core.pio_active_group: return
     text = event.message.text or ""
     
-    # ۱. تشخیص خنکی شلیک
-    if "تازه شلیک کردی" in text and "صبر کن" in text:
-        match = re.search(r'(\d+)\s*ثانی', text)
-        if match:
-            secs = int(match.group(1))
-            next_shoot_time = time.time() + secs
-            print(f"⏳ خنکی شلیک: {secs} ثانیه صبر میکنم")
+    # ۱. تشخیص خنکی شلیک (فقط اگه روی پیام "شلیک" خودمون ریپلای کرده باشه)
+    if "تازه شلیک کردی" in text and "ثانی" in text and event.message.is_reply:
+        try:
+            replied_msg = await event.message.get_reply_message()
+            me = await client.get_me()
+            # مطمئن میشیم که پیام شلیک مال خودمونه
+            if replied_msg and replied_msg.sender_id == me.id and (replied_msg.text or "").strip() == "شلیک":
+                match = re.search(r'(\d+)\s*ثانی', text)
+                if match:
+                    secs = int(match.group(1))
+                    new_time = time.time() + secs + 1  # ۱ ثانیه امنیت اضافه میکنیم
+                    # فقط اگه زمان جدید از زمان قبلی بیشتر باشه آپدیت میکنیم
+                    if new_time > next_shoot_time:
+                        next_shoot_time = new_time
+                        try:
+                            await client.send_message(event.chat_id, f"⏳ {secs} ثانیه دیگه شلیک میکنم.")
+                        except: pass
+        except: pass
             
     # ۲. تشخیص خون پر
     elif "نیازی به هیل نیست" in text and "کامله" in text:
@@ -129,10 +140,11 @@ async def piou_main_loop():
                     g_id = core.pio_active_group
                     m_id = core.pio_target_links.get(g_id, 18)
                     
-                    # چک کردن زمان شلیک بعدی (هر ۱ ثانیه چک میکنه تا دقیق بیدار بشه)
-                    if time.time() < next_shoot_time:
+                    # چک کردن زمان شلیک بعدی (هر ۱ ثانیه بیدار میشه)
+                    while time.time() < next_shoot_time:
+                        if not piou_active or not piou_shoot_active or not core.pio_active_group: break
                         await asyncio.sleep(1)
-                        continue
+                    if not piou_active or not piou_shoot_active: continue
                     
                     # ۱. شلیک
                     await client.send_message(g_id, "شلیک", reply_to=m_id); ammo_counter += 1
@@ -147,7 +159,7 @@ async def piou_main_loop():
                         
                     if ammo_counter % ammo_limit == 0: await client.send_message(g_id, "خرید مهمات", reply_to=m_id)
                     
-                    # ۳. تنظیم زمان شلیک بعدی (پیش‌فرض ۶۰ ثانیه)
+                    # ۳. تنظیم زمان شلیک بعدی (پیش‌فرض ۳۰ ثانیه)
                     next_shoot_time = time.time() + shoot_interval
             except: await asyncio.sleep(10)
         else: await asyncio.sleep(1)
