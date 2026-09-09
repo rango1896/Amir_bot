@@ -20,6 +20,7 @@ import smart_shoot
 import multi_react
 import squad
 import art
+import cooldown
 
 app = Flask(__name__)
 @app.route('/')
