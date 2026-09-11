@@ -1,11 +1,79 @@
 import requests
-import urllib.parse
+import json
 from telethon import events
 import core
 import asyncio
 
 # دیکشنری برای ذخیره حافظه مکالمات
 chat_histories = {}
+
+# متغیر برای نگه داشتن توکن خام DuckDuckGo
+ddg_vqd = None
+
+def get_ddg_token():
+    """گرفتن توکن اولیه از DuckDuckGo"""
+    url = "https://duckduckgo.com/duckchat/v1/status"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "x-vqd-accept": "1"
+    }
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        return r.headers.get("x-vqd-4")
+    return None
+
+def ask_ddg(messages, model="gpt-4o-mini"):
+    """ارسال درخواست به هوش مصنوعی DuckDuckGo"""
+    global ddg_vqd
+    if not ddg_vqd:
+        ddg_vqd = get_ddg_token()
+        if not ddg_vqd:
+            raise Exception("Cannot get DDG Token (Maybe blocked by Render IP)")
+
+    url = "https://duckduckgo.com/duckchat/v1/chat"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "x-vqd-4": ddg_vqd,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": messages
+    }
+
+    r = requests.post(url, headers=headers, json=payload, stream=True)
+
+    if r.status_code == 429:
+        ddg_vqd = None # ریست کردن توکن برای دفعه بعد
+        raise Exception("DuckDuckGo Rate Limit. Please wait a moment.")
+    elif r.status_code != 200:
+        ddg_vqd = None
+        raise Exception(f"DDG Error: {r.status_code}")
+
+    full_response = ""
+    # خواندن جواب به صورت استریم (همون جواب‌های روان که کلمه به کلمه میاد)
+    for line in r.iter_lines():
+        if line:
+            decoded_line = line.decode("utf-8")
+            if decoded_line.startswith("data: "):
+                json_str = decoded_line[6:]
+                if json_str == "[DONE]":
+                    break
+                try:
+                    data = json.loads(json_str)
+                    if data.get("message"):
+                        full_response += data["message"]
+                except:
+                    pass
+
+    # آپدیت کردن توکن برای پیام بعدی
+    new_vqd = r.headers.get("x-vqd-4")
+    if new_vqd:
+        ddg_vqd = new_vqd
+
+    return full_response
+
 
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^هوش پاک کن$'))
 async def clear_chat(event):
@@ -26,39 +94,16 @@ async def ai_chat_handler(event):
         
     chat_histories[chat_id].append({"role": "user", "content": question})
     
-    # محدود کردن حافظه به ۶ پیام آخر
-    if len(chat_histories[chat_id]) > 6:
-        chat_histories[chat_id] = chat_histories[chat_id][-6:]
+    # محدود کردن حافظه به ۱۰ پیام آخر
+    if len(chat_histories[chat_id]) > 10:
+        chat_histories[chat_id] = chat_histories[chat_id][-10:]
         
     try:
-        def ask_ai():
-            # ترکیب تاریخچه چت در یک متن واحد تا هوش مصنوعی حرف‌های قبلی رو بخونه
-            full_prompt = "You are a helpful assistant.\n"
-            for msg in chat_histories[chat_id]:
-                role = "User" if msg["role"] == "user" else "Assistant"
-                full_prompt += f"{role}: {msg['content']}\n"
-            
-            full_prompt += "Assistant: "
-            
-            # کدگذاری متن برای URL
-            encoded_prompt = urllib.parse.quote(full_prompt)
-            
-            # استفاده از موتور کاملا رایگان mistral + ترفند referrer برای جلوگیری از بلاک شدن
-            url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral&referrer=amir_bot"
-            
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-            }
-            
-            response = requests.get(url, headers=headers, timeout=40)
-            response.raise_for_status()
-            
-            return response.text
-        
-        response_text = await asyncio.to_thread(ask_ai)
+        # ارسال مستقیم تاریخچه چت به هوش مصنوعی (دقیقا مثل OpenAI)
+        response_text = await asyncio.to_thread(ask_ddg, chat_histories[chat_id])
         
         if response_text:
-            # ذخیره جواب برای حافظه پیام بعدی
+            # ذخیره جواب هوش مصنوعی در حافظه
             chat_histories[chat_id].append({"role": "assistant", "content": response_text})
             
             final_answer = f"🤖 **پاسخ هوش مصنوعی:**\n\n{response_text}"
