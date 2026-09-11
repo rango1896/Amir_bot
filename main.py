@@ -22,8 +22,6 @@ import squad
 import art
 import cooldown
 import stealer
-import autoread
-import ai_chat
 app = Flask(__name__)
 @app.route('/')
 def home():
