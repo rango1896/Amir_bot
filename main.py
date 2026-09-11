@@ -15,6 +15,7 @@ import user_info
 import spam
 import reactions
 import misc
+import ai_chat
 import shooting
 import smart_shoot
 import multi_react
