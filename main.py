@@ -15,7 +15,6 @@ import user_info
 import spam
 import reactions
 import misc
-import ai_chat
 import shooting
 import smart_shoot
 import multi_react
@@ -24,6 +23,7 @@ import art
 import cooldown
 import stealer
 import autoread
+import ai_chat
 app = Flask(__name__)
 @app.route('/')
 def home():
