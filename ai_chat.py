@@ -36,7 +36,7 @@ async def ai_chat_handler(event):
             # استفاده از API رایگان Pollinations با متد POST (دقیقا شبیه OpenAI)
             url = "https://text.pollinations.ai/openai"
             payload = {
-                "model": "openai", # مدل رایگان و خوب
+                "model": "llama", # مدل رایگان و خوب
                 "messages": chat_histories[chat_id], # ارسال کل تاریخچه چت (حافظه)
                 "seed": 101,
                 "temperature": 0.7
