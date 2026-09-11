@@ -39,7 +39,6 @@ DB_PIOU_TAG = "#DB_PIOU"
 pio_active_group = None
 pio_target_links = {}
 next_shoot_time = 0  # متغیر جدید برای سیستم خنکی
-autoread_chats = set()  # متغیر جدید برای سین خودکار
 # === توابع کمکی ===
 def fa_to_en_digits(text):
     persian_digits = '۰۱۲۳۴۵۶۷۸۹'
