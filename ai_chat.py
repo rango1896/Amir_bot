@@ -1,4 +1,5 @@
 import requests
+import urllib.parse
 from telethon import events
 import core
 import asyncio
@@ -20,45 +21,46 @@ async def ai_chat_handler(event):
     
     processing_msg = await event.edit(f"🧠 در حال فکر کردن به سوال...\n\n**سوال:** {question}")
     
-    # اگر چت جدید بود، یه حافظه خالی براش می‌سازیم
     if chat_id not in chat_histories:
         chat_histories[chat_id] = []
         
-    # اضافه کردن سوال فعلی شما به انتهای تاریخچه
     chat_histories[chat_id].append({"role": "user", "content": question})
     
-    # محدود کردن حافظه به ۱۰ پیام آخر (برای جلوگیری از پر شدن حجم و کند شدن ربات)
-    if len(chat_histories[chat_id]) > 10:
-        chat_histories[chat_id] = chat_histories[chat_id][-10:]
+    # محدود کردن حافظه به ۶ پیام آخر (برای جلوگیری از طولانی شدن بیش از حد)
+    if len(chat_histories[chat_id]) > 6:
+        chat_histories[chat_id] = chat_histories[chat_id][-6:]
         
     try:
         def ask_ai():
-            # استفاده از API رایگان Pollinations با متد POST (دقیقا شبیه OpenAI)
-            url = "https://text.pollinations.ai/openai"
-            payload = {
-                "model": "llama", # مدل رایگان و خوب
-                "messages": chat_histories[chat_id], # ارسال کل تاریخچه چت (حافظه)
-                "seed": 101,
-                "temperature": 0.7
-            }
+            # تبدیل تاریخچه مکالمات به یک متن واحد تا هوش مصنوعی حرف‌های قبلی رو بخونه
+            full_prompt = "You are a helpful assistant.\n"
+            for msg in chat_histories[chat_id]:
+                role = "User" if msg["role"] == "user" else "Assistant"
+                full_prompt += f"{role}: {msg['content']}\n"
+            
+            full_prompt += "Assistant: "
+            
+            # کدگذاری متن برای استفاده در URL
+            encoded_prompt = urllib.parse.quote(full_prompt)
+            
+            # استفاده از موتور رایگان Mistral در پولینیشن (بدون نیاز به API Key)
+            url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
+            
             headers = {
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0" # جلوگیری از بلاک شدن
+                "User-Agent": "Mozilla/5.0"
             }
             
-            # ارسال درخواست
-            response = requests.post(url, json=payload, headers=headers, timeout=40)
-            response.raise_for_status() # اگر ارور 402 یا 500 داد اینجا متوقف میشه
+            response = requests.get(url, headers=headers, timeout=40)
+            response.raise_for_status()
             
-            # استخراج جواب
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+            # پاسخ مستقیم به صورت متن برمیگرده
+            return response.text
         
         # اجرای تابع همگام در یک ترد جداگانه
         response_text = await asyncio.to_thread(ask_ai)
         
         if response_text:
-            # ذخیره جواب هوش مصنوعی در حافظه تا پیام بعدی بدونه چی گفته بود
+            # ذخیره جواب هوش مصنوعی در حافظه
             chat_histories[chat_id].append({"role": "assistant", "content": response_text})
             
             final_answer = f"🤖 **پاسخ هوش مصنوعی:**\n\n{response_text}"
@@ -68,11 +70,10 @@ async def ai_chat_handler(event):
                 
             await processing_msg.edit(final_answer)
         else:
-            # اگر جواب خالی بود، سوال رو از حافظه برمیداریم
             chat_histories[chat_id].pop()
             await processing_msg.edit("❌ هوش مصنوعی هیچ پاسخی برنگرداند. لطفا دوباره امتحان کنید.")
             
     except Exception as e:
-        # اگر اروری داد، سوال رو از حافظه برمیداریم تا دفعه بعد گیر نکنه
+        # اگر اروری داد، سوال رو از حافظه برمیداریم
         chat_histories[chat_id].pop()
         await processing_msg.edit(f"❌ خطا در ارتباط با هوش مصنوعی:\n`{e}`")
