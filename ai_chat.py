@@ -1,4 +1,5 @@
-from duckduckgo_search import DDGS
+import urllib.parse
+import urllib.request
 from telethon import events
 import core
 import asyncio
@@ -12,18 +13,33 @@ async def ai_chat_handler(event):
     processing_msg = await event.edit(f"🧠 در حال فکر کردن به سوال...\n\n**سوال:** {question}")
     
     try:
-        # تابع همگام برای پرسش از هوش مصنوعی
+        # تابع همگام برای پرسش از هوش مصنوعی (بدون نیاز به API و کتابخانه)
         def ask_ai():
-            with DDGS() as ddgs:
-                # مدل gpt-4o-mini رایگان و سریع است
-                return ddgs.chat(question, model="gpt-4o-mini")
+            # کدگذاری سوال برای استفاده در URL
+            encoded_question = urllib.parse.quote(question)
+            url = f"https://text.pollinations.ai/{encoded_question}"
+            
+            # ایجاد درخواست با User-Agent (برای جلوگیری از بلاک شدن)
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            
+            # ارسال درخواست و خواندن پاسخ
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return response.read().decode('utf-8')
         
         # اجرای تابع همگام در یک ترد جداگانه تا ربات تلگرام فریز نشود
-        response = await asyncio.to_thread(ask_ai)
+        response_text = await asyncio.to_thread(ask_ai)
         
         # اگر هوش مصنوعی جوابی داد
-        if response:
-            final_answer = f"🤖 **پاسخ هوش مصنوعی:**\n\n{response}"
+        if response_text:
+            final_answer = f"🤖 **پاسخ هوش مصنوعی:**\n\n{response_text}"
+            
+            # جلوگیری از ارور تلگرام برای متن‌های خیلی طولانی (محدودیت 4096 کاراکتر)
+            if len(final_answer) > 4000:
+                final_answer = final_answer[:4000] + "..."
+                
             await processing_msg.edit(final_answer)
         else:
             await processing_msg.edit("❌ هوش مصنوعی هیچ پاسخی برنگرداند.")
