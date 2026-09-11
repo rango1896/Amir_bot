@@ -1,8 +1,8 @@
-from duckduckgo_search import AsyncDDGS
+from duckduckgo_search import DDGS
 from telethon import events
 import core
+import asyncio
 
-# 注册命令: هوش [متن]
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^هوش (.+)$'))
 async def ai_chat_handler(event):
     # گرفتن متن سوال کاربر
@@ -12,10 +12,14 @@ async def ai_chat_handler(event):
     processing_msg = await event.edit(f"🧠 در حال فکر کردن به سوال...\n\n**سوال:** {question}")
     
     try:
-        # استفاده از هوش مصنوعی DuckDuckGo به صورت غیرهمزمان (Async)
-        # می‌تونید مدل رو بین "gpt-4o-mini" یا "claude-3-haiku" یا "llama-3.1-70b" تغییر بدید
-        async with AsyncDDGS() as ddgs:
-            response = await ddgs.chat(question, model="gpt-4o-mini")
+        # تابع همگام برای پرسش از هوش مصنوعی
+        def ask_ai():
+            with DDGS() as ddgs:
+                # مدل gpt-4o-mini رایگان و سریع است
+                return ddgs.chat(question, model="gpt-4o-mini")
+        
+        # اجرای تابع همگام در یک ترد جداگانه تا ربات تلگرام فریز نشود
+        response = await asyncio.to_thread(ask_ai)
         
         # اگر هوش مصنوعی جوابی داد
         if response:
