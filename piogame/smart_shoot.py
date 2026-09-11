@@ -4,7 +4,7 @@ import time
 from telethon import events
 import core
 from core import client
-import shooting
+from . import shooting
 
 smart_active = False
 refill_active = True
