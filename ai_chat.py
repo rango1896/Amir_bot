@@ -4,7 +4,7 @@ from telethon import events
 import core
 import asyncio
 
-# این دیکشنری برای ذخیره حافظه مکالمات شماست
+# دیکشنری برای ذخیره حافظه مکالمات
 chat_histories = {}
 
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^هوش پاک کن$'))
@@ -12,7 +12,7 @@ async def clear_chat(event):
     chat_id = event.chat_id
     if chat_id in chat_histories:
         del chat_histories[chat_id]
-    await event.edit("🧹 حافظه هوش مصنوعی برای این چت پاک شد! از الان حرف‌های قبلی رو یادش نمیاد.")
+    await event.edit("🧹 حافظه هوش مصنوعی پاک شد!")
 
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^هوش (.+)$'))
 async def ai_chat_handler(event):
@@ -26,13 +26,13 @@ async def ai_chat_handler(event):
         
     chat_histories[chat_id].append({"role": "user", "content": question})
     
-    # محدود کردن حافظه به ۶ پیام آخر (برای جلوگیری از طولانی شدن بیش از حد)
+    # محدود کردن حافظه به ۶ پیام آخر
     if len(chat_histories[chat_id]) > 6:
         chat_histories[chat_id] = chat_histories[chat_id][-6:]
         
     try:
         def ask_ai():
-            # تبدیل تاریخچه مکالمات به یک متن واحد تا هوش مصنوعی حرف‌های قبلی رو بخونه
+            # ترکیب تاریخچه چت در یک متن واحد تا هوش مصنوعی حرف‌های قبلی رو بخونه
             full_prompt = "You are a helpful assistant.\n"
             for msg in chat_histories[chat_id]:
                 role = "User" if msg["role"] == "user" else "Assistant"
@@ -40,27 +40,25 @@ async def ai_chat_handler(event):
             
             full_prompt += "Assistant: "
             
-            # کدگذاری متن برای استفاده در URL
+            # کدگذاری متن برای URL
             encoded_prompt = urllib.parse.quote(full_prompt)
             
-            # استفاده از موتور رایگان Mistral در پولینیشن (بدون نیاز به API Key)
-            url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
+            # استفاده از موتور کاملا رایگان mistral + ترفند referrer برای جلوگیری از بلاک شدن
+            url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral&referrer=amir_bot"
             
             headers = {
-                "User-Agent": "Mozilla/5.0"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             }
             
             response = requests.get(url, headers=headers, timeout=40)
             response.raise_for_status()
             
-            # پاسخ مستقیم به صورت متن برمیگرده
             return response.text
         
-        # اجرای تابع همگام در یک ترد جداگانه
         response_text = await asyncio.to_thread(ask_ai)
         
         if response_text:
-            # ذخیره جواب هوش مصنوعی در حافظه
+            # ذخیره جواب برای حافظه پیام بعدی
             chat_histories[chat_id].append({"role": "assistant", "content": response_text})
             
             final_answer = f"🤖 **پاسخ هوش مصنوعی:**\n\n{response_text}"
@@ -71,9 +69,8 @@ async def ai_chat_handler(event):
             await processing_msg.edit(final_answer)
         else:
             chat_histories[chat_id].pop()
-            await processing_msg.edit("❌ هوش مصنوعی هیچ پاسخی برنگرداند. لطفا دوباره امتحان کنید.")
-            
+            await processing_msg.edit("❌ هوش مصنوعی هیچ پاسخی برنگرداند.")
+                
     except Exception as e:
-        # اگر اروری داد، سوال رو از حافظه برمیداریم
         chat_histories[chat_id].pop()
         await processing_msg.edit(f"❌ خطا در ارتباط با هوش مصنوعی:\n`{e}`")
