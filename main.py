@@ -22,6 +22,7 @@ import squad
 import art
 import cooldown
 import stealer
+import autoread
 app = Flask(__name__)
 @app.route('/')
 def home():
