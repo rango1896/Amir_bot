@@ -5,23 +5,15 @@ import threading
 from telethon import events
 import urllib.request
 
-# لود کردن مستقیم فایل‌ها
-import factory
-import fishing
-import cats
-import anti_delete
-import alerts 
-import user_info
-import spam
-import reactions
-import misc
-import shooting
-import smart_shoot
-import multi_react
-import squad
-import art
-import cooldown
-import stealer
+# === لود کردن ماژول‌ها از پوشه mew_game ===
+from mew_game import factory, fishing, cats
+
+# === لود کردن ماژول‌ها از پوشه piogame ===
+from piogame import shooting, smart_shoot, cooldown, art, squad
+
+# === لود کردن ماژول‌ها از پوشه tools ===
+from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer
+
 app = Flask(__name__)
 @app.route('/')
 def home():
