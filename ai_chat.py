@@ -1,5 +1,4 @@
-import g4f
-from g4f.client import Client
+import requests
 from telethon import events
 import core
 import asyncio
@@ -34,15 +33,26 @@ async def ai_chat_handler(event):
         
     try:
         def ask_ai():
-            client = Client()
-            # استفاده از مدل و پروایدر مشخص تا درگیر ارورهای کروم و پولی نشیم
-            response = client.chat.completions.create(
-                model="gpt-4",
-                provider=g4f.Provider.Blackbox, # این سرویس بدون کروم و رایگانه
-                messages=chat_histories[chat_id], # ارسال کل تاریخچه چت به جای فقط یک سوال
-                timeout=30
-            )
-            return response.choices[0].message.content
+            # استفاده از API رایگان Pollinations با متد POST (دقیقا شبیه OpenAI)
+            url = "https://text.pollinations.ai/openai"
+            payload = {
+                "model": "openai", # مدل رایگان و خوب
+                "messages": chat_histories[chat_id], # ارسال کل تاریخچه چت (حافظه)
+                "seed": 101,
+                "temperature": 0.7
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0" # جلوگیری از بلاک شدن
+            }
+            
+            # ارسال درخواست
+            response = requests.post(url, json=payload, headers=headers, timeout=40)
+            response.raise_for_status() # اگر ارور 402 یا 500 داد اینجا متوقف میشه
+            
+            # استخراج جواب
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
         
         # اجرای تابع همگام در یک ترد جداگانه
         response_text = await asyncio.to_thread(ask_ai)
