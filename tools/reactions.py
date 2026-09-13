@@ -1,80 +1,106 @@
-from telethon import events, utils
+import asyncio
+import random
+import json
+import os
+from telethon import TelegramClient, events, utils
+from telethon.sessions import StringSession
 from telethon.tl.functions.messages import SendReactionRequest
 from telethon.tl.types import ReactionEmoji
-import core
-from core import client, save_db
+from flask import Flask
+import threading
 
-react_active = True # متغیر برای روشن و خاموش بودن
+# ================= تنظیمات اکانت اصلی (خودت) =================
+API_ID = 17349
+API_HASH = "344583e45741c457fe1862106095a5eb"
+MASTER_SESSION = "1A..."  # استرینگ سشن اکانت خودت رو اینجا بذار
+# ==========================================================
 
-def extract_username_from_url(text):
-    if "t.me/" in text:
-        parts = text.split("t.me/")[-1].split("/")
-        return parts[0] if parts[0] else text
-    return text
+app = Flask(__name__)
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش (روشن|خاموش)$'))
-async def react_toggle(event):
-    global react_active
-    status = event.pattern_match.group(1)
-    react_active = True if status == "روشن" else False
-    await event.reply(f"🪄 سیستم واکنش خودکار **{status}** شد.")
+@app.route('/')
+def home():
+    return "ربات واکنش چندگانه زنده است! 🚀"
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+(.+)\s+(\S+)$'))
+def run_web():
+    app.run(host='0.0.0.0', port=8080)
+
+# ساخت کلاینت اصلی (اکانت خودت)
+master_client = TelegramClient(StringSession(MASTER_SESSION), API_ID, API_HASH)
+
+# لود کردن سشن‌های فرعی از فایل accounts.json
+worker_sessions = []
+if os.path.exists('accounts.json'):
+    with open('accounts.json', 'r') as f:
+        worker_sessions = json.load(f)
+
+# ساخت کلاینت‌های فرعی (سنیورها)
+worker_clients = [TelegramClient(StringSession(s), API_ID, API_HASH) for s in worker_sessions]
+
+# دیتابیس موقت برای نگهداری چنل‌ها و واکنش‌ها
+active_reactions = {}  # ساختار: {chat_id: {"count": 1, "emojis": ["❤️"]}}
+
+def clean_target_string(target_str):
+    if "t.me/" in target_str:
+        parts = target_str.split("t.me/")[-1].split("/")
+        if parts[0]: return parts[0]
+    return target_str
+
+# ----------------- هندلر دستورات (فقط برای اکانت اصلی) -----------------
+
+@master_client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+(\d+|مختلف)\s+(\S+)\s+(.+)$'))
 async def add_react(event):
-    global react_active
-    target_str = event.pattern_match.group(1).strip()
-    emoji = event.pattern_match.group(2).strip()
-    if target_str in ["لیست", "حذف", "روشن", "خاموش"]: return
+    count_str = event.pattern_match.group(1)
+    target_str = event.pattern_match.group(2)
+    emojis_str = event.pattern_match.group(3)
+    
+    emojis = emojis_str.split()
+    clean_target = clean_target_string(target_str)
+    
     try:
-        if target_str.lstrip('-').isdigit():
-            pid = int(target_str)
-            ent = await client.get_entity(pid)
-            pid = utils.get_peer_id(ent)
+        ent = await master_client.get_entity(clean_target)
+        chat_id = utils.get_peer_id(ent)
+        
+        if count_str == "مختلف":
+            count = "all"
         else:
-            clean_target = extract_username_from_url(target_str)
-            ent = await client.get_entity(clean_target)
-            pid = utils.get_peer_id(ent)
+            count = int(count_str)
             
-        core.auto_react_targets[pid] = emoji
-        react_active = True # وقتی آیدی اضافه میکنی خودکار روشن میشه
-        await save_db()
-        await event.reply(f"✅ واکنش {emoji} برای `{target_str}` تنظیم شد.")
+        active_reactions[chat_id] = {"count": count, "emojis": emojis}
+        await event.reply(f"✅ واکنش تنظیم شد.\nچنل: `{clean_target}`\nتعداد: {count_str}\nایموجی‌ها: {' '.join(emojis)}")
     except Exception as e:
-        print(f"خطا در تنظیم واکنش: {e}")
-        await event.reply("❗ کاربر/کانال پیدا نشد.")
+        print(f"خطا: {e}")
+        await event.reply("❗ چنل/گروه پیدا نشد یا لینک اشتباه است.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(.+)$'))
+@master_client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(\S+)$'))
 async def rem_react(event):
     target_str = event.pattern_match.group(1).strip()
+    clean_target = clean_target_string(target_str)
     try:
-        if target_str.lstrip('-').isdigit():
-            pid = int(target_str)
-            ent = await client.get_entity(pid)
-            pid = utils.get_peer_id(ent)
+        ent = await master_client.get_entity(clean_target)
+        chat_id = utils.get_peer_id(ent)
+        
+        if chat_id in active_reactions:
+            del active_reactions[chat_id]
+            await event.reply(f"❌ واکنش برای `{clean_target}` پاک شد.")
         else:
-            clean_target = extract_username_from_url(target_str)
-            ent = await client.get_entity(clean_target)
-            pid = utils.get_peer_id(ent)
+            await event.reply("❗ این چنل تو لیست واکنش‌ها نیست.")
+    except:
+        await event.reply("❗ پیدا نشد.")
 
-        if pid in core.auto_react_targets:
-            del core.auto_react_targets[pid]
-            await save_db()
-            await event.reply(f"❌ واکنش برای `{target_str}` حذف شد.")
-        else: await event.reply("❗ در لیست نیست.")
-    except: await event.reply("❗ پیدا نشد.")
+# ----------------- هندلر واکنش خودکار (شنود پیام‌ها) -----------------
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^(لیست واکنش|واکنش لیست)$'))
-async def list_react(event):
-    if not core.auto_react_targets: return await event.reply("📋 لیست خالی است.")
-    t = "📋 **لیست واکنش‌ها:**\n\n" + "\n".join([f"▫️ `{i}`: {n}" for i, n in core.auto_react_targets.items()])
-    await event.reply(t)
-
-@client.on(events.NewMessage())
+@master_client.on(events.NewMessage())
 async def auto_react_handler(event):
-    if react_active and core.auto_react_targets and event.chat_id in core.auto_react_targets:
+    chat_id = event.chat_id
+    if chat_id in active_reactions:
+        config = active_reactions[chat_id]
+        count = config["count"]
+        emojis = config["emojis"]
+        
+        # ۱. اول خودِ اکانت اصلی واکنش میده
+        emoji = random.choice(emojis)
         try:
-            emoji_str = core.auto_react_targets[event.chat_id]
-            reaction = ReactionEmoji(emoticon=emoji_str)
-            await client(SendReactionRequest(peer=event.chat_id, msg_id=event.id, reaction=[reaction]))
+            await event.react(emoji)
+            print(f"✅ اکانت اصلی واکنش {emoji} رو پیام {event.id} گذاشت.")
         except Exception as e:
-            print(f"خطا در واکنش خودکار: {e}")
+            print(f"❌
