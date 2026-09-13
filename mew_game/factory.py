@@ -1,4 +1,5 @@
 import asyncio
+import re
 from telethon import events
 import core
 from core import client
@@ -57,16 +58,93 @@ async def factory_cycle():
             await asyncio.sleep(2)
             if not await click_factory_button(panel_id, "شروع تولید"): continue
             
-            print("⏳ تولید استارت خورد. سیستم ۱۳ ساعت و ۱۵ دقیقه صبر می‌کنه...")
+            # --- بخش جدید: استخراج زمان از متن ربات ---
+            print("⏳ تولید استارت خورد. در حال استخراج زمان باقی‌مانده...")
+            await asyncio.sleep(2) # یه کم صبر می‌کنیم تا ربات بازی پنل رو آپدیت کنه
+            
+            await client.send_message(core.group_entity, "کارخونه میویی")
+            await asyncio.sleep(3)
+            
+            panel_msg_2 = None
+            async for m in client.iter_messages(core.group_entity, limit=5):
+                if m.buttons:
+                    panel_msg_2 = m
+                    break
+            
+            if not panel_msg_2:
+                print("⚠️ پنل پیدا نشد تا زمان رو بخونیم. ۱۰ دقیقه استراحت و تلاش مجدد...")
+                await asyncio.sleep(600)
+                continue
+                
+            p_id_2 = panel_msg_2.id
+            
+            # کلیک مجدد روی دکمه تولید برای ظاهر شدن پیام "در حال تولید هستید"
+            if not await click_factory_button(p_id_2, "تولید"):
+                print("⚠️ دکمه تولید برای خوندن زمان پیدا نشد.")
+                await asyncio.sleep(10)
+                continue
+                
+            await asyncio.sleep(3) # صبر تا ربات پیام زمان رو بفرسته
+            
+            # پیدا کردن پیامی که توش زمان باقی‌مانده نوشته شده
+            target_msg = None
+            async for m in client.iter_messages(core.group_entity, limit=5):
+                if m.text and "زمان باقی مانده" in m.text:
+                    target_msg = m
+                    break
+            
+            if not target_msg:
+                print("⚠️ متن زمان باقی‌مانده تو پیام‌ها پیدا نشد!")
+                await asyncio.sleep(10)
+                continue
+                
+            text = target_msg.text
+            # جستجوی زمان با ریجکس (مثلا 10:50:41)
+            match = re.search(r'زمان باقی مانده\s*:\s*([0-9:]+)', text)
+            
+            if not match:
+                print("⚠️ فرمت زمان پیدا نشد.")
+                await asyncio.sleep(10)
+                continue
+                
+            time_str = match.group(1)
+            parts = time_str.split(':')
+            
+            # تبدیل زمان به ثانیه
+            if len(parts) == 3: # فرمت HH:MM:SS
+                h, m, s = map(int, parts)
+                total_seconds = h * 3600 + m * 60 + s
+            elif len(parts) == 2: # فرمت MM:SS
+                m, s = map(int, parts)
+                total_seconds = m * 60 + s
+            else:
+                total_seconds = 0
+                
+            if total_seconds <= 0:
+                print("⚠️ زمان صفر یا نامعتبر است.")
+                await asyncio.sleep(10)
+                continue
+                
+            # ۳۰ ثانیه اضافه برای اطمینان از کامل شدن تولید
+            total_seconds += 30
+            
+            # ارسال پیام اطلاع‌رسانی به شما
+            h_fmt = total_seconds // 3600
+            m_fmt = (total_seconds % 3600) // 60
+            notify_text = f"✅ زمان باقی‌مانده استخراج شد: {time_str}\n🔄 ربات به مدت {h_fmt} ساعت و {m_fmt} دقیقه استراحت می‌کنه تا تولید تموم بشه."
+            await client.send_message(core.group_entity, notify_text, reply_to=target_msg.id)
+            print(notify_text)
+            
+            # استراحت به اندازه زمان استخراج شده
             waited = 0
-            while waited < 47700 and core.factory_active:
+            while waited < total_seconds and core.factory_active:
                 await asyncio.sleep(60)
                 waited += 60
             
             if not core.factory_active:
                 break
             
-            # --- فاز فروش (کاملاً اصلاح شده) ---
+            # --- فاز فروش (کد خودتون) ---
             print("💰 زمان فروش رسید. شروع فاز فروش...")
             sold_successfully = False
             
@@ -92,6 +170,7 @@ async def factory_cycle():
                         print("⚠️ دکمه انبار پیدا نشد.")
                         await asyncio.sleep(5)
                         continue
+
                     await asyncio.sleep(2)
                     
                     if not await click_factory_coords(p_id, 0, 0):
@@ -125,7 +204,7 @@ async def factory_cycle():
 async def factory_on(event):
     if not core.factory_active:
         core.factory_active = True
-        await event.reply("🏭 سیستم کارخونه میویی **روشن** شد.")
+        await event.reply("🏭 سیستم کارخونه میویی روشن شد.")
         asyncio.create_task(factory_cycle())
     else:
         await event.reply("❗ کارخونه از قبل روشنه.")
@@ -133,4 +212,4 @@ async def factory_on(event):
 @client.on(events.NewMessage(outgoing=True, pattern=r'^کارخونه میویی خاموش$'))
 async def factory_off(event):
     core.factory_active = False
-    await event.reply("🛑 سیستم کارخونه میویی **خاموش** شد.")
+    await event.reply("🛑 سیستم کارخونه میویی خاموش شد.")
