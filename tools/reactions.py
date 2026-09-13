@@ -12,7 +12,7 @@ import threading
 # ================= تنظیمات اکانت اصلی (خودت) =================
 API_ID = 17349
 API_HASH = "344583e45741c457fe1862106095a5eb"
-MASTER_SESSION = "1A..."  # استرینگ سشن اکانت خودت رو اینجا بذار
+MASTER_SESSION = "1BJWap1wBu8O4UESk3VHZPpuIXdc8PMzfYUKhxpy5bjCRohf1vOpCGmrKwuTFdIL3VRC_dQ_HDTFZFEQGp0ktrnmJ0GSShQklPMcuie8jwtJny9RcuMF8CHsxbRNDprqmZBcv_oO84iPRje1eCH4NneHKkRJFsij2IFljGaM_FpM11GjyvQ_r4IngKjn5stx89McZP-ptmxrZgpLh81T0LHJ-DvFt6Ez9X8-2RYB8FpsPZ7pDE36GxdWroBFugoYj5uGx1TcBCtqs8L5y3_J0QQwgG3ODQ8xhjnmCyniu3govwu2U4Y6QciqZXsHhQVP9B0XNzwLtIXCj3iBD84OEu3B_UfqtXq0="  # استرینگ سشن اکانت خودت رو اینجا بذار
 # ==========================================================
 
 app = Flask(__name__)
