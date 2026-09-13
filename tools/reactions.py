@@ -103,4 +103,49 @@ async def auto_react_handler(event):
             await event.react(emoji)
             print(f"✅ اکانت اصلی واکنش {emoji} رو پیام {event.id} گذاشت.")
         except Exception as e:
-            print(f"❌
+            print(f"❌ خطا اکانت اصلی: {e}")
+        
+        # ۲. اگه تعداد بیشتر از ۱ بود، سنیورها واکنش میدن
+        if count != 1:
+            # اگه مختلف بود، همه سنیورها میان، در غیر اینصورت به تعداد خواسته شده
+            workers_to_use = worker_clients if count == "all" else worker_clients[:count-1]
+            
+            for w_client in workers_to_use:
+                # تاخیر ۱ تا ۳ ثانیه‌ای تا اکانت‌ها محدود نشن
+                await asyncio.sleep(random.randint(1, 3))
+                try:
+                    emoji = random.choice(emojis)
+                    reaction = [ReactionEmoji(emoticon=emoji)]
+                    await w_client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=reaction))
+                    print(f"✅ یه سنیور واکنش {emoji} گذاشت.")
+                except Exception as e:
+                    print(f"❌ خطا سنیور: {e}")
+
+# ----------------- اجرای ربات -----------------
+
+async def start_workers():
+    for i, w_client in enumerate(worker_clients):
+        try:
+            await w_client.connect()
+            if await w_client.is_user_authorized():
+                print(f"✅ سنیور شماره {i+1} وصل شد.")
+            else:
+                print(f"❌ سنیور شماره {i+1} لاگین نیست!")
+        except Exception as e:
+            print(f"❌ خطا در اتصال سنیور {i+1}: {e}")
+
+async def main():
+    await master_client.start()
+    me = await master_client.get_me()
+    print(f"✅ ربات روشن شد! وارد اکانت {me.first_name} شدیم.")
+    await start_workers()
+    print("در حال شنود پیام‌های چنل‌ها...")
+    await master_client.run_until_disconnected()
+
+if __name__ == "__main__":
+    # روشن کردن وب‌سرور فلاسک برای رندر
+    threading.Thread(target=run_web).start()
+    
+    # اجرای ربات
+    with master_client:
+        master_client.loop.run_until_complete(main())
