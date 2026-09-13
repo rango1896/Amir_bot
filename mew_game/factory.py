@@ -84,21 +84,25 @@ async def factory_cycle():
                 await asyncio.sleep(10)
                 continue
                 
-            await asyncio.sleep(3) # صبر تا ربات پیام زمان رو بفرسته
+            await asyncio.sleep(3) # صبر تا ربات پنل رو ادیت کنه و زمان رو نشون بده
             
-            # پیدا کردن پیامی که توش زمان باقی‌مانده نوشته شده
-            target_msg = None
-            async for m in client.iter_messages(core.group_entity, limit=5):
-                if m.text and "زمان باقی مانده" in m.text:
-                    target_msg = m
-                    break
-            
-            if not target_msg:
-                print("⚠️ متن زمان باقی‌مانده تو پیام‌ها پیدا نشد!")
+            # پیدا کردن متن پیام (معمولا ربات همون پنل رو ادیت میکنه)
+            target_msg = await client.get_messages(core.group_entity, ids=p_id_2)
+            text = ""
+            if target_msg and target_msg.text:
+                text = target_msg.text
+            else:
+                # اگر ادیت نکرده بود، پیام‌های اخیر رو چک می‌کنیم
+                async for m in client.iter_messages(core.group_entity, limit=5):
+                    if m.text and "زمان باقی مانده" in m.text:
+                        text = m.text
+                        break
+                        
+            if "زمان باقی مانده" not in text:
+                print("⚠️ متن زمان باقی‌مانده تو پیام‌ها پیدا نشد! ادامه میدیم...")
                 await asyncio.sleep(10)
                 continue
                 
-            text = target_msg.text
             # جستجوی زمان با ریجکس (مثلا 10:50:41)
             match = re.search(r'زمان باقی مانده\s*:\s*([0-9:]+)', text)
             
@@ -132,7 +136,7 @@ async def factory_cycle():
             h_fmt = total_seconds // 3600
             m_fmt = (total_seconds % 3600) // 60
             notify_text = f"✅ زمان باقی‌مانده استخراج شد: {time_str}\n🔄 ربات به مدت {h_fmt} ساعت و {m_fmt} دقیقه استراحت می‌کنه تا تولید تموم بشه."
-            await client.send_message(core.group_entity, notify_text, reply_to=target_msg.id)
+            await client.send_message(core.group_entity, notify_text)
             print(notify_text)
             
             # استراحت به اندازه زمان استخراج شده
