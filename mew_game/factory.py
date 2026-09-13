@@ -30,8 +30,8 @@ async def click_factory_coords(msg_id, row_idx, col_idx, timeout=30):
 async def factory_cycle():
     while core.factory_active:
         try:
-            # --- فاز تولید ---
-            print("🏭 شروع چرخه کارخونه (فاز تولید)...")
+            # --- باز کردن پنل کارخونه ---
+            print("🏭 شروع چرخه کارخونه...")
             await client.send_message(core.group_entity, "کارخونه میویی")
             await asyncio.sleep(3)
             
@@ -48,64 +48,46 @@ async def factory_cycle():
             
             panel_id = panel_msg.id
             
-            if not await click_factory_button(panel_id, "تولید"): continue
-            await asyncio.sleep(2)
-            if not await click_factory_button(panel_id, "تولیدی هواپیما"): continue
-            await asyncio.sleep(2)
-            if not await click_factory_coords(panel_id, 0, 2): continue
-            await asyncio.sleep(2)
-            if not await click_factory_coords(panel_id, 0, 3): continue
-            await asyncio.sleep(2)
-            if not await click_factory_button(panel_id, "شروع تولید"): continue
-            
-            # --- بخش جدید: استخراج زمان از متن ربات ---
-            print("⏳ تولید استارت خورد. در حال استخراج زمان باقی‌مانده...")
-            await asyncio.sleep(2) # یه کم صبر می‌کنیم تا ربات بازی پنل رو آپدیت کنه
-            
-            await client.send_message(core.group_entity, "کارخونه میویی")
+            # --- بررسی اینکه آیا در حال تولید هستیم یا خیر ---
+            # کلیک روی دکمه تولید برای دیدن وضعیت
+            await click_factory_button(panel_id, "تولید")
             await asyncio.sleep(3)
             
-            panel_msg_2 = None
-            async for m in client.iter_messages(core.group_entity, limit=5):
-                if m.buttons:
-                    panel_msg_2 = m
+            # جستجوی متن "زمان باقی مانده" در پیام‌های اخیر (چه پیام جدید چه ادیت شده)
+            time_text = ""
+            async for m in client.iter_messages(core.group_entity, limit=10):
+                if m.text and "زمان باقی مانده" in m.text:
+                    time_text = m.text
                     break
             
-            if not panel_msg_2:
-                print("⚠️ پنل پیدا نشد تا زمان رو بخونیم. ۱۰ دقیقه استراحت و تلاش مجدد...")
-                await asyncio.sleep(600)
-                continue
+            # --- اگر در حال تولید نبود، استارت می‌زنیم ---
+            if not time_text:
+                print("⚙️ تولید استارت نخورده بود. در حال استارت زدن تولید...")
+                if not await click_factory_button(panel_id, "تولیدی هواپیما"): continue
+                await asyncio.sleep(2)
+                if not await click_factory_coords(panel_id, 0, 2): continue
+                await asyncio.sleep(2)
+                if not await click_factory_coords(panel_id, 0, 3): continue
+                await asyncio.sleep(2)
+                if not await click_factory_button(panel_id, "شروع تولید"): continue
+                await asyncio.sleep(3)
                 
-            p_id_2 = panel_msg_2.id
-            
-            # کلیک مجدد روی دکمه تولید برای ظاهر شدن پیام "در حال تولید هستید"
-            if not await click_factory_button(p_id_2, "تولید"):
-                print("⚠️ دکمه تولید برای خوندن زمان پیدا نشد.")
-                await asyncio.sleep(10)
-                continue
+                # بعد از استارت، دوباره دکمه تولید رو می‌زنیم تا زمان رو بهمون نشون بده
+                await click_factory_button(panel_id, "تولید")
+                await asyncio.sleep(3)
                 
-            await asyncio.sleep(3) # صبر تا ربات پنل رو ادیت کنه و زمان رو نشون بده
-            
-            # پیدا کردن متن پیام (معمولا ربات همون پنل رو ادیت میکنه)
-            target_msg = await client.get_messages(core.group_entity, ids=p_id_2)
-            text = ""
-            if target_msg and target_msg.text:
-                text = target_msg.text
-            else:
-                # اگر ادیت نکرده بود، پیام‌های اخیر رو چک می‌کنیم
-                async for m in client.iter_messages(core.group_entity, limit=5):
+                async for m in client.iter_messages(core.group_entity, limit=10):
                     if m.text and "زمان باقی مانده" in m.text:
-                        text = m.text
+                        time_text = m.text
                         break
-                        
-            if "زمان باقی مانده" not in text:
-                print("⚠️ متن زمان باقی‌مانده تو پیام‌ها پیدا نشد! ادامه میدیم...")
+            
+            if not time_text:
+                print("⚠️ هنوز نتونستیم زمان رو پیدا کنیم. ۱۰ ثانیه دیگه تلاش می‌کنیم...")
                 await asyncio.sleep(10)
                 continue
-                
-            # جستجوی زمان با ریجکس (مثلا 10:50:41)
-            match = re.search(r'زمان باقی مانده\s*:\s*([0-9:]+)', text)
             
+            # --- استخراج زمان ---
+            match = re.search(r'زمان باقی مانده\s*:\s*([0-9:]+)', time_text)
             if not match:
                 print("⚠️ فرمت زمان پیدا نشد.")
                 await asyncio.sleep(10)
@@ -114,11 +96,11 @@ async def factory_cycle():
             time_str = match.group(1)
             parts = time_str.split(':')
             
-            # تبدیل زمان به ثانیه
-            if len(parts) == 3: # فرمت HH:MM:SS
+            # تبدیل زمان به ثانیه (چه فرمت 10:50:41 باشه چه 50:41)
+            if len(parts) == 3: 
                 h, m, s = map(int, parts)
                 total_seconds = h * 3600 + m * 60 + s
-            elif len(parts) == 2: # فرمت MM:SS
+            elif len(parts) == 2: 
                 m, s = map(int, parts)
                 total_seconds = m * 60 + s
             else:
@@ -128,9 +110,9 @@ async def factory_cycle():
                 print("⚠️ زمان صفر یا نامعتبر است.")
                 await asyncio.sleep(10)
                 continue
-                
-            # ۳۰ ثانیه اضافه برای اطمینان از کامل شدن تولید
-            total_seconds += 30
+            
+            # ۵ ثانیه اضافه فقط برای اطمینان از اینکه تولید صددرصد تموم شده باشه
+            total_seconds += 5
             
             # ارسال پیام اطلاع‌رسانی به شما
             h_fmt = total_seconds // 3600
@@ -139,7 +121,7 @@ async def factory_cycle():
             await client.send_message(core.group_entity, notify_text)
             print(notify_text)
             
-            # استراحت به اندازه زمان استخراج شده
+            # --- استراحت ---
             waited = 0
             while waited < total_seconds and core.factory_active:
                 await asyncio.sleep(60)
@@ -148,11 +130,11 @@ async def factory_cycle():
             if not core.factory_active:
                 break
             
-            # --- فاز فروش (کد خودتون) ---
+            # --- فاز فروش ---
             print("💰 زمان فروش رسید. شروع فاز فروش...")
             sold_successfully = False
             
-            for attempt in range(3): # ۳ بار تلاش میکنه تا بتونه بفروشه
+            for attempt in range(3): 
                 try:
                     await client.send_message(core.group_entity, "کارخونه میویی")
                     await asyncio.sleep(3)
@@ -190,7 +172,7 @@ async def factory_cycle():
                         
                     print("✅ فروش با موفقیت انجام شد. چرخه از اول تکرار میشه...")
                     sold_successfully = True
-                    break # اگه فروخت، از حلقه تلاش خارج میشه
+                    break 
                 except Exception as e:
                     print(f"❌ خطا در تلاش {attempt+1} فروش: {e}")
                     await asyncio.sleep(5)
