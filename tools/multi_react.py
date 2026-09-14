@@ -42,7 +42,8 @@ async def add_react(event):
         else:
             count = int(core.fa_to_en_digits(count_str))
             
-        active_reactions[chat_id] = {"count": count, "emojis": emojis}
+        # ذخیره آیدی عددی و یوزرنیم (برای استفاده سنیورها)
+        active_reactions[chat_id] = {"count": count, "emojis": emojis, "target_str": clean_target}
         await event.reply(f"✅ واکنش تنظیم شد.\nچنل: `{clean_target}`\nتعداد: {count_str}\nایموجی‌ها: {' '.join(emojis)}")
     except Exception as e:
         await event.reply(f"❗ ارور در پیدا کردن چنل: {e}")
@@ -69,14 +70,12 @@ async def auto_react_handler(event):
         config = active_reactions[chat_id]
         count = config["count"]
         emojis = config["emojis"]
-        
-        # دریافت InputPeer کامل برای پاس دادن به سنیورها (حل مشکل Entity Not Found)
-        input_peer = event.input_chat
+        target_str = config.get("target_str")  # یوزرنیم چنل
         
         # ۱. واکنش اکانت اصلی
         emoji = random.choice(emojis)
         try:
-            await core.client(SendReactionRequest(peer=input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
+            await core.client(SendReactionRequest(peer=event.input_chat, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
             print(f"✅ اکانت اصلی واکنش {emoji} گذاشت.")
         except Exception as e:
             err_msg = f"❌ خطا اکانت اصلی:\n{e}"
@@ -90,8 +89,12 @@ async def auto_react_handler(event):
             for i, w_client in enumerate(workers_to_use):
                 await asyncio.sleep(random.randint(1, 3))
                 try:
+                    # سنیور خودش چنل رو پیدا میکنه (بدون نیاز به جوین بودن)
+                    w_entity = await w_client.get_entity(target_str)
+                    w_input_peer = utils.get_input_peer(w_entity)
+                    
                     e = random.choice(emojis)
-                    await w_client(SendReactionRequest(peer=input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
+                    await w_client(SendReactionRequest(peer=w_input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
                     print(f"✅ سنیور {i+1} واکنش {e} گذاشت.")
                 except Exception as ex:
                     err_msg = f"❌ خطا سنیور {i+1}:\n{ex}"
