@@ -12,7 +12,7 @@ import threading
 # ================= تنظیمات اکانت اصلی (خودت) =================
 API_ID = 17349
 API_HASH = "344583e45741c457fe1862106095a5eb"
-MASTER_SESSION = "1BJWap1wBu8O4UESk3VHZPpuIXdc8PMzfYUKhxpy5bjCRohf1vOpCGmrKwuTFdIL3VRC_dQ_HDTFZFEQGp0ktrnmJ0GSShQklPMcuie8jwtJny9RcuMF8CHsxbRNDprqmZBcv_oO84iPRje1eCH4NneHKkRJFsij2IFljGaM_FpM11GjyvQ_r4IngKjn5stx89McZP-ptmxrZgpLh81T0LHJ-DvFt6Ez9X8-2RYB8FpsPZ7pDE36GxdWroBFugoYj5uGx1TcBCtqs8L5y3_J0QQwgG3ODQ8xhjnmCyniu3govwu2U4Y6QciqZXsHhQVP9B0XNzwLtIXCj3iBD84OEu3B_UfqtXq0="  # استرینگ سشن اکانت خودت رو اینجا بذار
+MASTER_SESSION = "1BJWap1wBu8O4UESk3VHZPpuIXdc8PMzfYUKhxpy5bjCRohf1vOpCGmrKwuTFdIL3VRC_dQ_HDTFZFEQGp0ktrnmJ0GSShQklPMcuie8jwtJny9RcuMF8CHsxbRNDprqmZBcv_oO84iPRje1eCH4NneHKkRJFsij2IFljGaM_FpM11GjyvQ_r4IngKjn5stx89McZP-ptmxrZgpLh81T0LHJ-DvFt6Ez9X8-2RYB8FpsPZ7pDE36GxdWroBFugoYj5uGx1TcBCtqs8L5y3_J0QQwgG3ODQ8xhjnmCyniu3govwu2U4Y6QciqZXsHhQVP9B0XNzwLtIXCj3iBD84OEu3B_UfqtXq0="
 # ==========================================================
 
 app = Flask(__name__)
@@ -24,30 +24,24 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=8080)
 
-# ساخت کلاینت اصلی (اکانت خودت)
 master_client = TelegramClient(StringSession(MASTER_SESSION), API_ID, API_HASH)
 
-# لود کردن سشن‌های فرعی از فایل accounts.json
 worker_sessions = []
 if os.path.exists('accounts.json'):
     with open('accounts.json', 'r') as f:
         worker_sessions = json.load(f)
 
-# ساخت کلاینت‌های فرعی (سنیورها)
 worker_clients = [TelegramClient(StringSession(s), API_ID, API_HASH) for s in worker_sessions]
-
-# دیتابیس موقت برای نگهداری چنل‌ها و واکنش‌ها
-active_reactions = {}  # ساختار: {chat_id: {"count": 1, "emojis": ["❤️"]}}
+active_reactions = {}
 
 def clean_target_string(target_str):
     if "t.me/" in target_str:
         parts = target_str.split("t.me/")[-1].split("/")
         if parts[0]: return parts[0]
-    return target_str
+    return target_str.replace("@", "")
 
-# ----------------- هندلر دستورات (فقط برای اکانت اصلی) -----------------
-
-@master_client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+(\d+|مختلف)\s+(\S+)\s+(.+)$'))
+# هندلر دستورات (فقط پیام‌هایی که خودت می‌فرستی رو می‌خونه)
+@master_client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+([0-9۰-۹]+|مختلف)\s+(\S+)\s+(.+)$'))
 async def add_react(event):
     count_str = event.pattern_match.group(1)
     target_str = event.pattern_match.group(2)
@@ -68,8 +62,8 @@ async def add_react(event):
         active_reactions[chat_id] = {"count": count, "emojis": emojis}
         await event.reply(f"✅ واکنش تنظیم شد.\nچنل: `{clean_target}`\nتعداد: {count_str}\nایموجی‌ها: {' '.join(emojis)}")
     except Exception as e:
-        print(f"خطا: {e}")
-        await event.reply("❗ چنل/گروه پیدا نشد یا لینک اشتباه است.")
+        print(f"خطا در ثبت: {e}")
+        await event.reply(f"❗ چنل پیدا نشد. ارور: {e}")
 
 @master_client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(\S+)$'))
 async def rem_react(event):
@@ -87,8 +81,7 @@ async def rem_react(event):
     except:
         await event.reply("❗ پیدا نشد.")
 
-# ----------------- هندلر واکنش خودکار (شنود پیام‌ها) -----------------
-
+# هندلر واکنش خودکار
 @master_client.on(events.NewMessage())
 async def auto_react_handler(event):
     chat_id = event.chat_id
@@ -97,21 +90,20 @@ async def auto_react_handler(event):
         count = config["count"]
         emojis = config["emojis"]
         
-        # ۱. اول خودِ اکانت اصلی واکنش میده
+        # واکنش اکانت اصلی
         emoji = random.choice(emojis)
         try:
-            await event.react(emoji)
-            print(f"✅ اکانت اصلی واکنش {emoji} رو پیام {event.id} گذاشت.")
+            reaction = [ReactionEmoji(emoticon=emoji)]
+            await master_client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=reaction))
+            print(f"✅ اکانت اصلی واکنش {emoji} گذاشت.")
         except Exception as e:
             print(f"❌ خطا اکانت اصلی: {e}")
         
-        # ۲. اگه تعداد بیشتر از ۱ بود، سنیورها واکنش میدن
+        # واکنش سنیورها
         if count != 1:
-            # اگه مختلف بود، همه سنیورها میان، در غیر اینصورت به تعداد خواسته شده
             workers_to_use = worker_clients if count == "all" else worker_clients[:count-1]
             
             for w_client in workers_to_use:
-                # تاخیر ۱ تا ۳ ثانیه‌ای تا اکانت‌ها محدود نشن
                 await asyncio.sleep(random.randint(1, 3))
                 try:
                     emoji = random.choice(emojis)
@@ -120,8 +112,6 @@ async def auto_react_handler(event):
                     print(f"✅ یه سنیور واکنش {emoji} گذاشت.")
                 except Exception as e:
                     print(f"❌ خطا سنیور: {e}")
-
-# ----------------- اجرای ربات -----------------
 
 async def start_workers():
     for i, w_client in enumerate(worker_clients):
@@ -143,9 +133,6 @@ async def main():
     await master_client.run_until_disconnected()
 
 if __name__ == "__main__":
-    # روشن کردن وب‌سرور فلاسک برای رندر
     threading.Thread(target=run_web).start()
-    
-    # اجرای ربات
     with master_client:
         master_client.loop.run_until_complete(main())
