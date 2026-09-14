@@ -24,7 +24,7 @@ def clean_target_string(target_str):
         if parts[0]: return parts[0]
     return target_str.replace("@", "")
 
-@core.client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+([0-9۰-9]+|مختلف)\s+(\S+)\s+(.+)$'))
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+([0-9۰-۹]+|مختلف)\s+(\S+)\s+(.+)$'))
 async def add_react(event):
     count_str = event.pattern_match.group(1)
     target_str = event.pattern_match.group(2)
