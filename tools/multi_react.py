@@ -16,7 +16,6 @@ if os.path.exists('accounts.json'):
 
 # ساخت کلاینت‌های فرعی (سنیورها)
 worker_clients = [TelegramClient(StringSession(s), core.API_ID, core.API_HASH) for s in worker_sessions]
-active_reactions = {}
 
 def clean_target_string(target_str):
     if "t.me/" in target_str:
@@ -42,8 +41,10 @@ async def add_react(event):
         else:
             count = int(core.fa_to_en_digits(count_str))
             
-        # ذخیره آیدی عددی و یوزرنیم (برای استفاده سنیورها)
-        active_reactions[chat_id] = {"count": count, "emojis": emojis, "target_str": clean_target}
+        # ذخیره در دیتابیس تلگرامی
+        core.multi_active_reactions[chat_id] = {"count": count, "emojis": emojis, "target_str": clean_target}
+        await core.save_db()  # <--- سیو کردن تو دیتابیس تلگرام
+        
         await event.reply(f"✅ واکنش تنظیم شد.\nچنل: `{clean_target}`\nتعداد: {count_str}\nایموجی‌ها: {' '.join(emojis)}")
     except Exception as e:
         await event.reply(f"❗ ارور در پیدا کردن چنل: {e}")
@@ -55,8 +56,9 @@ async def rem_react(event):
     try:
         ent = await core.client.get_entity(clean_target)
         chat_id = utils.get_peer_id(ent)
-        if chat_id in active_reactions:
-            del active_reactions[chat_id]
+        if chat_id in core.multi_active_reactions:
+            del core.multi_active_reactions[chat_id]
+            await core.save_db()  # <--- سیو کردن تغییرات تو دیتابیس تلگرام
             await event.reply("❌ پاک شد.")
         else:
             await event.reply("❗ تو لیست نیست.")
@@ -66,16 +68,18 @@ async def rem_react(event):
 @core.client.on(events.NewMessage())
 async def auto_react_handler(event):
     chat_id = event.chat_id
-    if chat_id in active_reactions:
-        config = active_reactions[chat_id]
+    if chat_id in core.multi_active_reactions:
+        config = core.multi_active_reactions[chat_id]
         count = config["count"]
         emojis = config["emojis"]
-        target_str = config.get("target_str")  # یوزرنیم چنل
+        target_str = config.get("target_str")
+        
+        input_peer = event.input_chat
         
         # ۱. واکنش اکانت اصلی
         emoji = random.choice(emojis)
         try:
-            await core.client(SendReactionRequest(peer=event.input_chat, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
+            await core.client(SendReactionRequest(peer=input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
             print(f"✅ اکانت اصلی واکنش {emoji} گذاشت.")
         except Exception as e:
             err_msg = f"❌ خطا اکانت اصلی:\n{e}"
@@ -89,10 +93,8 @@ async def auto_react_handler(event):
             for i, w_client in enumerate(workers_to_use):
                 await asyncio.sleep(random.randint(1, 3))
                 try:
-                    # سنیور خودش چنل رو پیدا میکنه (بدون نیاز به جوین بودن)
                     w_entity = await w_client.get_entity(target_str)
                     w_input_peer = utils.get_input_peer(w_entity)
-                    
                     e = random.choice(emojis)
                     await w_client(SendReactionRequest(peer=w_input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
                     print(f"✅ سنیور {i+1} واکنش {e} گذاشت.")
