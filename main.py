@@ -89,7 +89,7 @@ async def main():
     asyncio.ensure_future(shooting.meat_loop())
     asyncio.ensure_future(shooting.blind_shot_loop())
     asyncio.ensure_future(shooting.piou_main_loop())
-    asyncio.ensure_future(multi_react.start_multi_clients())
+    asyncio.ensure_future(multi_react.start_multi_clients())  # <--- این خط سنیورها رو وصل میکنه
     asyncio.ensure_future(squad.squad_loop())
     asyncio.ensure_future(art.art_loop())
     
