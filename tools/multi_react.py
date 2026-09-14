@@ -70,15 +70,20 @@ async def auto_react_handler(event):
         count = config["count"]
         emojis = config["emojis"]
         
+        # دریافت InputPeer کامل برای پاس دادن به سنیورها (حل مشکل Entity Not Found)
+        input_peer = event.input_chat
+        
+        # ۱. واکنش اکانت اصلی
         emoji = random.choice(emojis)
         try:
-            await core.client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
+            await core.client(SendReactionRequest(peer=input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
             print(f"✅ اکانت اصلی واکنش {emoji} گذاشت.")
         except Exception as e:
             err_msg = f"❌ خطا اکانت اصلی:\n{e}"
             print(err_msg)
             await core.client.send_message('me', err_msg)
         
+        # ۲. واکنش سنیورها
         if count != 1:
             workers_to_use = worker_clients if count == "all" else worker_clients[:count-1]
             
@@ -86,7 +91,7 @@ async def auto_react_handler(event):
                 await asyncio.sleep(random.randint(1, 3))
                 try:
                     e = random.choice(emojis)
-                    await w_client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
+                    await w_client(SendReactionRequest(peer=input_peer, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
                     print(f"✅ سنیور {i+1} واکنش {e} گذاشت.")
                 except Exception as ex:
                     err_msg = f"❌ خطا سنیور {i+1}:\n{ex}"
