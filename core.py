@@ -35,6 +35,7 @@ ghost_mode_active = False
 tag_targets = {}
 notes_list = []
 auto_react_targets = {}
+multi_active_reactions = {}  # <--- متغیر جدید برای واکنش‌های چندگانه
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
@@ -74,7 +75,7 @@ def strip_clock(name):
 # === توابع دیتابیس تلگرامی ===
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    global pio_active_group, pio_target_links
+    global pio_active_group, pio_target_links, multi_active_reactions # multi_active_reactions اضافه شد
     
     # لود دیتابیس اصلی ربات از گروه hankhhh
     async for msg in client.iter_messages(DB_CHAT, limit=50):
@@ -88,6 +89,7 @@ async def load_db():
                     notes_list = data.get("notes", [])
                     keywords_list = set(data.get("keywords", []))
                     auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
+                    multi_active_reactions = {int(k): v for k, v in data.get("multi_reactions", {}).items()} # لود واکنش‌های چندگانه
                     print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
@@ -113,10 +115,11 @@ async def save_db():
         "tags": {str(k): v for k, v in tag_targets.items()},
         "notes": notes_list,
         "keywords": list(keywords_list),
-        "reactions": {str(k): v for k, v in auto_react_targets.items()}
+        "reactions": {str(k): v for k, v in auto_react_targets.items()},
+        "multi_reactions": {str(k): v for k, v in multi_active_reactions.items()}  # ذخیره واکنش‌های چندگانه
     }
     json_str = json.dumps(data, ensure_ascii=False)
-    text_to_save = f"{DB_TAG} {json_str}" # همون فرمت ساده قبلی
+    text_to_save = f"{DB_TAG} {json_str}"
     
     if len(text_to_save) > 4000: text_to_save = text_to_save[:4000]
     found_msg = None
