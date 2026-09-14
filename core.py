@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from telethon import TelegramClient, events, utils
+from telethon.sessions import StringSession
 from telethon.tl.functions.account import UpdateProfileRequest
 
 API_ID = 17349
@@ -11,7 +12,10 @@ API_HASH = "344583e45741c457fe1862106095a5eb"
 TARGET_GROUP = -1004290700072  # گروه بازی خودت
 group_entity = None
 
-client = TelegramClient('sessions/amir_session', API_ID, API_HASH)
+# === استفاده از استرینگ سشن برای رندر ===
+MASTER_SESSION = "1BJWap1wBu8O4UESk3VHZPpuIXdc8PMzfYUKhxpy5bjCRohf1vOpCGmrKwuTFdIL3VRC_dQ_HDTFZFEQGp0ktrnmJ0GSShQklPMcuie8jwtJny9RcuMF8CHsxbRNDprqmZBcv_oO84iPRje1eCH4NneHKkRJFsij2IFljGaM_FpM11GjyvQ_r4IngKjn5stx89McZP-ptmxrZgpLh81T0LHJ-DvFt6Ez9X8-2RYB8FpsPZ7pDE36GxdWroBFugoYj5uGx1TcBCtqs8L5y3_J0QQwgG3ODQ8xhjnmCyniu3govwu2U4Y6QciqZXsHhQVP9B0XNzwLtIXCj3iBD84OEu3B_UfqtXq0="
+client = TelegramClient(StringSession(MASTER_SESSION), API_ID, API_HASH)
+# ==========================================
 
 # === متغیرهای مشترک ربات ===
 collect_points_active = False
@@ -39,6 +43,7 @@ DB_PIOU_TAG = "#DB_PIOU"
 pio_active_group = None
 pio_target_links = {}
 next_shoot_time = 0  # متغیر جدید برای سیستم خنکی
+
 # === توابع کمکی ===
 def fa_to_en_digits(text):
     persian_digits = '۰۱۲۳۴۵۶۷۸۹'
