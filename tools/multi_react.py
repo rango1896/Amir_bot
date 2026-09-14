@@ -1,81 +1,219 @@
 import asyncio
-from telethon import TelegramClient, events
+import random
+import json
+import os
+from telethon import events, utils
+from telethon.sessions import StringSession
 from telethon.tl.functions.messages import SendReactionRequest
-from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.types import ReactionEmoji
 import core
-from core import client as client1
 
-# --- ساخت سشن‌های رفیقات از پوشه react_sessions ---
-client2 = TelegramClient('react_sessions/friend2_session', core.API_ID, core.API_HASH)
-client3 = TelegramClient('react_sessions/friend3_session', core.API_ID, core.API_HASH)
-client4 = TelegramClient('react_sessions/friendAmir_session', core.API_ID, core.API_HASH)
+# لود کردن سشن‌های فرعی از فایل accounts.json
+worker_sessions = []
+if os.path.exists('accounts.json'):
+    with open('accounts.json', 'r') as f:
+        worker_sessions = json.load(f)
 
-multi_clients = [client1, client2, client3, client4]
+# ساخت کلاینت‌های فرعی (سنیورها)
+worker_clients = [TelegramClient(StringSession(s), core.API_ID, core.API_HASH) for s in worker_sessions]
+active_reactions = {}
 
-# متغیرهای واکنش عمومی
-multi_react_chat_id = None
-multi_react_emoji = None
+def clean_target_string(target_str):
+    if "t.me/" in target_str:
+        parts = target_str.split("t.me/")[-1].split("/")
+        if parts[0]: return parts[0]
+    return target_str.replace("@", "")
 
-async def start_multi_clients():
-    if not client2.is_connected(): await client2.start()
-    if not client3.is_connected(): await client3.start()
-    if not client4.is_connected(): await client4.start()
-    print("✅ تمام ۴ سشن برای واکنش عمومی متصل شدند.")
-
-@client1.on(events.NewMessage(outgoing=True, pattern=r'^اد واکنش عمومی\s+(\S+)\s+(\S+)$'))
-async def add_multi_react(event):
-    global multi_react_chat_id, multi_react_emoji
-    link = event.pattern_match.group(1)
-    emoji = event.pattern_match.group(2)
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+([0-9۰-9]+|مختلف)\s+(\S+)\s+(.+)$'))
+async def add_react(event):
+    count_str = event.pattern_match.group(1)
+    target_str = event.pattern_match.group(2)
+    emojis_str = event.pattern_match.group(3)
+    
+    emojis = emojis_str.split()
+    clean_target = clean_target_string(target_str)
     
     try:
-        # پیدا کردن آیدی گروه/کانال
-        if "t.me/c/" in link:
-            parts = link.split("t.me/c/")[-1].split("/")
-            if len(parts) == 2 and parts[0].isdigit():
-                entity = await client1.get_entity(int("-100" + parts[0]))
-            else:
-                return await event.reply("❗ لینک گروه خصوصی اشتباه است.")
-        else:
-            username = link.split("t.me/")[-1].split("/")[0]
-            entity = await client1.get_entity(username)
-            
-        # عضو شدن سشن خودمون (client1) تو کانال/گروه
-        try:
-            await client1(JoinChannelRequest(entity))
-            print(f"✅ سشن شما عضو {entity.title} شد.")
-        except Exception as e:
-            print(f"عضو شدن انجام نشد (شاید قبلا عضو بوده‌اید): {e}")
-
-        multi_react_chat_id = entity.id
-        multi_react_emoji = emoji
+        ent = await core.client.get_entity(clean_target)
+        chat_id = utils.get_peer_id(ent)
         
-        await start_multi_clients()
-        await event.reply(f"✅ واکنش عمومی {emoji} فعال شد.\nسشن شما عضو شد و منتظر میمونه تا پست جدید بیاد، بعدش بقیه سشن‌ها رو خبر می‌کنه.")
-    except Exception as e:
-        await event.reply(f"❗ خطا در ثبت لینک: {e}")
-
-@client1.on(events.NewMessage(outgoing=True, pattern=r'^اد حذف واکنش عمومی$'))
-async def remove_multi_react(event):
-    global multi_react_chat_id, multi_react_emoji
-    multi_react_chat_id = None
-    multi_react_emoji = None
-    await event.reply("🛑 واکنش عمومی متوقف شد.")
-
-@client1.on(events.NewMessage(incoming=True))
-async def multi_react_listener(event):
-    # اگه واکنش عمومی روشن بود و پیام از کانال هدف اومد
-    if multi_react_chat_id and event.chat_id == multi_react_chat_id and multi_react_emoji:
-        try:
-            # ۱. اول سشن خودمون واکنش میده
-            await client1(SendReactionRequest(peer=event.input_chat, msg_id=event.id, reaction=[ReactionEmoji(emoticon=multi_react_emoji)]))
+        if count_str == "مختلف":
+            count = "all"
+        else:
+            # تبدیل عدد فارسی به انگلیسی
+            count = int(core.fa_to_en_digits(count_str))
             
-            # ۲. بعد بقیه سشن‌ها رو خبر می‌کنیم که بیان و واکنش بزنن
-            for c in [client2, client3, client4]:
-                try:
-                    await c(SendReactionRequest(peer=event.input_chat, msg_id=event.id, reaction=[ReactionEmoji(emoticon=multi_react_emoji)]))
-                except Exception as e:
-                    print(f"خطا در واکنش سشن رفیق: {e}")
+        active_reactions[chat_id] = {"count": count, "emojis": emojis}
+        await event.reply(f"✅ واکنش تنظیم شد.\nچنل: `{clean_target}`\nتعداد: {count_str}\nایموجی‌ها: {' '.join(emojis)}")
+    except Exception as e:
+        await event.reply(f"❗ ارور در پیدا کردن چنل: {e}")
+
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(\S+)$'))
+async def rem_react(event):
+    target_str = event.pattern_match.group(1).strip()
+    clean_target = clean_target_string(target_str)
+    try:
+        ent = await core.client.get_entity(clean_target)
+        chat_id = utils.get_peer_id(ent)
+        if chat_id in active_reactions:
+            del active_reactions[chat_id]
+            await event.reply("❌ پاک شد.")
+        else:
+            await event.reply("❗ تو لیست نیست.")
+    except:
+        await event.reply("❗ پیدا نشد.")
+
+@core.client.on(events.NewMessage())
+async def auto_react_handler(event):
+    chat_id = event.chat_id
+    if chat_id in active_reactions:
+        config = active_reactions[chat_id]
+        count = config["count"]
+        emojis = config["emojis"]
+        
+        # ۱. واکنش اکانت اصلی
+        emoji = random.choice(emojis)
+        try:
+            await core.client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
+            print(f"✅ اکانت اصلی واکنش {emoji} گذاشت.")
         except Exception as e:
-            print(f"خطا در واکنش عمومی: {e}")
+            err_msg = f"❌ خطا اکانت اصلی:\n{e}"
+            print(err_msg)
+            await core.client.send_message('me', err_msg) # میفرسته تو پیوی خودت ببینی چشه
+        
+        # ۲. واکنش سنیورها
+        if count != 1:
+            workers_to_use = worker_clients if count == "all" else worker_clients[:count-1]
+            
+            for i, w_client in enumerate(workers_to_use):
+                await asyncio.sleep(random.randint(1, 3))
+                try:
+                    e = random.choice(emojis)
+                    await w_client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
+                    print(f"✅ سنیور {i+1} واکنش {e} گذاشت.")
+                except Exception as ex:
+                    err_msg = f"❌ خطا سنیور {i+1}:\n{ex}"
+                    print(err_msg)
+                    await core.client.send_message('me', err_msg)
+
+async def start_multi_clients():
+    """این تابع رو main.py صدا میزنه"""
+    for i, w_client in enumerate(worker_clients):
+        try:
+            await w_client.connect()
+            if await w_client.is_user_authorized():
+                print(f"✅ سنیور واکنش {i+1} وصل شد.")
+            else:
+                print(f"❌ سنیور واکنش {i+1} لاگین نیست!")
+                await core.client.send_message('me', f"❌ سنیور واکنش {i+1} لاگین نیست!")
+        except Exception as e:
+            print(f"❌ خطا سنیور {i+1}: {e}")import asyncio
+import random
+import json
+import os
+from telethon import events, utils
+from telethon.sessions import StringSession
+from telethon.tl.functions.messages import SendReactionRequest
+from telethon.tl.types import ReactionEmoji
+import core
+
+# لود کردن سشن‌های فرعی از فایل accounts.json
+worker_sessions = []
+if os.path.exists('accounts.json'):
+    with open('accounts.json', 'r') as f:
+        worker_sessions = json.load(f)
+
+# ساخت کلاینت‌های فرعی (سنیورها)
+worker_clients = [TelegramClient(StringSession(s), core.API_ID, core.API_HASH) for s in worker_sessions]
+active_reactions = {}
+
+def clean_target_string(target_str):
+    if "t.me/" in target_str:
+        parts = target_str.split("t.me/")[-1].split("/")
+        if parts[0]: return parts[0]
+    return target_str.replace("@", "")
+
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^واکنش\s+([0-9۰-9]+|مختلف)\s+(\S+)\s+(.+)$'))
+async def add_react(event):
+    count_str = event.pattern_match.group(1)
+    target_str = event.pattern_match.group(2)
+    emojis_str = event.pattern_match.group(3)
+    
+    emojis = emojis_str.split()
+    clean_target = clean_target_string(target_str)
+    
+    try:
+        ent = await core.client.get_entity(clean_target)
+        chat_id = utils.get_peer_id(ent)
+        
+        if count_str == "مختلف":
+            count = "all"
+        else:
+            # تبدیل عدد فارسی به انگلیسی
+            count = int(core.fa_to_en_digits(count_str))
+            
+        active_reactions[chat_id] = {"count": count, "emojis": emojis}
+        await event.reply(f"✅ واکنش تنظیم شد.\nچنل: `{clean_target}`\nتعداد: {count_str}\nایموجی‌ها: {' '.join(emojis)}")
+    except Exception as e:
+        await event.reply(f"❗ ارور در پیدا کردن چنل: {e}")
+
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^حذف واکنش\s+(\S+)$'))
+async def rem_react(event):
+    target_str = event.pattern_match.group(1).strip()
+    clean_target = clean_target_string(target_str)
+    try:
+        ent = await core.client.get_entity(clean_target)
+        chat_id = utils.get_peer_id(ent)
+        if chat_id in active_reactions:
+            del active_reactions[chat_id]
+            await event.reply("❌ پاک شد.")
+        else:
+            await event.reply("❗ تو لیست نیست.")
+    except:
+        await event.reply("❗ پیدا نشد.")
+
+@core.client.on(events.NewMessage())
+async def auto_react_handler(event):
+    chat_id = event.chat_id
+    if chat_id in active_reactions:
+        config = active_reactions[chat_id]
+        count = config["count"]
+        emojis = config["emojis"]
+        
+        # ۱. واکنش اکانت اصلی
+        emoji = random.choice(emojis)
+        try:
+            await core.client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=[ReactionEmoji(emoticon=emoji)]))
+            print(f"✅ اکانت اصلی واکنش {emoji} گذاشت.")
+        except Exception as e:
+            err_msg = f"❌ خطا اکانت اصلی:\n{e}"
+            print(err_msg)
+            await core.client.send_message('me', err_msg) # میفرسته تو پیوی خودت ببینی چشه
+        
+        # ۲. واکنش سنیورها
+        if count != 1:
+            workers_to_use = worker_clients if count == "all" else worker_clients[:count-1]
+            
+            for i, w_client in enumerate(workers_to_use):
+                await asyncio.sleep(random.randint(1, 3))
+                try:
+                    e = random.choice(emojis)
+                    await w_client(SendReactionRequest(peer=chat_id, msg_id=event.id, reaction=[ReactionEmoji(emoticon=e)]))
+                    print(f"✅ سنیور {i+1} واکنش {e} گذاشت.")
+                except Exception as ex:
+                    err_msg = f"❌ خطا سنیور {i+1}:\n{ex}"
+                    print(err_msg)
+                    await core.client.send_message('me', err_msg)
+
+async def start_multi_clients():
+    """این تابع رو main.py صدا میزنه"""
+    for i, w_client in enumerate(worker_clients):
+        try:
+            await w_client.connect()
+            if await w_client.is_user_authorized():
+                print(f"✅ سنیور واکنش {i+1} وصل شد.")
+            else:
+                print(f"❌ سنیور واکنش {i+1} لاگین نیست!")
+                await core.client.send_message('me', f"❌ سنیور واکنش {i+1} لاگین نیست!")
+        except Exception as e:
+            print(f"❌ خطا سنیور {i+1}: {e}")
