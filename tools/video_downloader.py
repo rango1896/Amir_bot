@@ -21,7 +21,7 @@ download_queue = asyncio.Queue()
 def download_video(url):
     import yt_dlp
     ydl_opts = {
-        'format': 'bestvideo[height<=360]+bestaudio/best', 
+        'format': 'bestvideo*+bestaudio/best', # بهترین کیفیت موجود رو پیدا میکنه
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
