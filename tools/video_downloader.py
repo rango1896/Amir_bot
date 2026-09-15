@@ -25,6 +25,8 @@ def download_video(url):
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
+        # تغییر کلاینت به اندروید برای دور زدن بلاک بات یوتیوب
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -62,32 +64,23 @@ async def video_downloader_handler(event):
     text = event.message.text or ""
     url_match = re.search(URL_REGEX, text, re.IGNORECASE)
     
-    # فقط اگه لینک داشت و تو لیست سفید بود
     if url_match and event.chat_id in core.downloader_whitelist:
         url = url_match.group(1)
-        
-        # گذاشتن درخواست تو صف
         await event.reply("⏳ درخواست شما در صف دانلود قرار گرفت. لطفا صبر کنید...")
         await download_queue.put((event, url))
 
 async def download_worker():
-    """این تابع همیشه تو بک‌گرانده و یکی‌یکی درخواست‌ها رو پردازش می‌کنه"""
     while True:
         event, url = await download_queue.get()
         try:
-            # دانلود ویدیو
             file_path = await asyncio.to_thread(download_video, url)
-            # ارسال ویدیو
             await event.reply(file=file_path, force_document=False)
-            # پاک کردن فایل
             if os.path.exists(file_path):
                 os.remove(file_path)
         except Exception as e:
             await event.reply(f"❌ خطا در دانلود ویدیو:\n`{e}`")
         finally:
-            # علامت‌گذاری اتمام کار این درخواست
             download_queue.task_done()
 
 async def start_download_worker():
-    """این تابع رو main.py صدا میزنه"""
     asyncio.ensure_future(download_worker())
