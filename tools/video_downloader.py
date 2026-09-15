@@ -21,17 +21,17 @@ download_queue = asyncio.Queue()
 def download_video(url):
     import yt_dlp
     
-    # چک کردن اینکه آیا فایل کوکی وجود داره یا نه
     if not os.path.exists('cookies.txt'):
-        raise Exception("فایل cookies.txt تو سرور پیدا نشد! مطمئن شو تو گیت‌هاب کنار main.py گذاشتیش.")
+        raise Exception("فایل cookies.txt پیدا نشد!")
 
     ydl_opts = {
-        'format': 'best', # ساده‌ترین حالت دانلود
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
         'cookiefile': 'cookies.txt',
         'noplaylist': True,
+        # استفاده از کلاینت اندروید همراه با کوکی
+        'extractor_args': {'youtube': {'player_client': ['android']}}
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
