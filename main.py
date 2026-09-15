@@ -12,7 +12,7 @@ from mew_game import factory, fishing, cats
 from piogame import shooting, smart_shoot, cooldown, art, squad
 
 # === لود کردن ماژول‌ها از پوشه tools ===
-from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer
+from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader
 
 app = Flask(__name__)
 @app.route('/')
