@@ -5,6 +5,7 @@ from telethon import events
 import core
 import static_ffmpeg
 
+# اضافه کردن مسیر FFmpeg دانلود شده توسط پایتون
 static_ffmpeg.add_path()
 
 # ساخت پوشه دانلود اگه وجود نداشت
