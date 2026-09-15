@@ -26,8 +26,8 @@ def download_video(url):
         'quiet': True,
         'no_warnings': True,
         # تغییر کلاینت به اندروید برای دور زدن بلاک بات یوتیوب
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
-    }
+                'extractor_args': {'youtube': {'player_client': ['tv', 'ios', 'android', 'web']}}
+        
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
