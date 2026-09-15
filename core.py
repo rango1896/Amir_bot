@@ -35,7 +35,8 @@ ghost_mode_active = False
 tag_targets = {}
 notes_list = []
 auto_react_targets = {}
-multi_active_reactions = {}  # <--- متغیر جدید برای واکنش‌های چندگانه
+multi_active_reactions = {}
+downloader_whitelist = set()  # <--- لیست سفید برای دانلودر
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
@@ -43,7 +44,7 @@ TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 DB_PIOU_TAG = "#DB_PIOU"
 pio_active_group = None
 pio_target_links = {}
-next_shoot_time = 0  # متغیر جدید برای سیستم خنکی
+next_shoot_time = 0
 
 # === توابع کمکی ===
 def fa_to_en_digits(text):
@@ -75,9 +76,8 @@ def strip_clock(name):
 # === توابع دیتابیس تلگرامی ===
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    global pio_active_group, pio_target_links, multi_active_reactions # multi_active_reactions اضافه شد
+    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist
     
-    # لود دیتابیس اصلی ربات از گروه hankhhh
     async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
             try:
@@ -89,13 +89,13 @@ async def load_db():
                     notes_list = data.get("notes", [])
                     keywords_list = set(data.get("keywords", []))
                     auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
-                    multi_active_reactions = {int(k): v for k, v in data.get("multi_reactions", {}).items()} # لود واکنش‌های چندگانه
+                    multi_active_reactions = {int(k): v for k, v in data.get("multi_reactions", {}).items()}
+                    downloader_whitelist = set(data.get("downloader_whitelist", [])) # لود لیست دانلودر
                     print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
             break
 
-    # لود دیتابیس پیو از گروه hankhhh
     async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_PIOU_TAG):
             try:
@@ -116,7 +116,8 @@ async def save_db():
         "notes": notes_list,
         "keywords": list(keywords_list),
         "reactions": {str(k): v for k, v in auto_react_targets.items()},
-        "multi_reactions": {str(k): v for k, v in multi_active_reactions.items()}  # ذخیره واکنش‌های چندگانه
+        "multi_reactions": {str(k): v for k, v in multi_active_reactions.items()},
+        "downloader_whitelist": list(downloader_whitelist) # ذخیره لیست دانلودر
     }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_TAG} {json_str}"
