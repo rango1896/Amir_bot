@@ -5,10 +5,10 @@ from telethon import events
 import core
 import static_ffmpeg
 
-# اضافه کردن مسیر FFmpeg دانلود شده توسط پایتون
-static_ffmpeg.add_path()
+# اضافه کردن مسیر FFmpeg
+static_ffmpeg.add_paths()
 
-# ساخت پوشه دانلود اگه وجود نداشت
+# ساخت پوشه دانلود
 if not os.path.exists('downloads'):
     os.makedirs('downloads')
 
@@ -16,7 +16,6 @@ if not os.path.exists('downloads'):
 URL_REGEX = r'(https?://(?:www\.)?(?:instagram\.com|youtube\.com|youtu\.be|tiktok\.com|twitter\.com|x\.com|pinterest\.com|facebook\.com)/\S+)'
 
 def download_video(url):
-    """تابع دانلود ویدیو"""
     import yt_dlp
     ydl_opts = {
         'format': 'best[height<=720]', 
@@ -40,13 +39,9 @@ async def video_downloader_handler(event):
             await event.reply("⏳ در حال دانلود ویدیو... لطفا کمی صبر کن.")
             
             try:
-                # اجرای دانلود در بک‌گراند
                 file_path = await asyncio.to_thread(download_video, url)
-                
-                # ارسال ویدیو
                 await event.reply(file=file_path, force_document=False)
                 
-                # پاک کردن فایل
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     
