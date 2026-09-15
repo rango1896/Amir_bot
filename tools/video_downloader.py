@@ -5,8 +5,7 @@ from telethon import events
 import core
 import static_ffmpeg
 
-# اضافه کردن مسیر FFmpeg دانلود شده توسط پایتون به متغیرهای محیطی
-os.environ["PATH"] = static_ffmpeg.run.add_path() + os.pathsep + os.environ.get("PATH", "")
+static_ffmpeg.add_path()
 
 # ساخت پوشه دانلود اگه وجود نداشت
 if not os.path.exists('downloads'):
