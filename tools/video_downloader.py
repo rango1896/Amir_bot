@@ -20,10 +20,16 @@ download_queue = asyncio.Queue()
 
 def download_video(url):
     import yt_dlp
+    
+    # چک کردن اینکه آیا فایل کوکی وجود داره یا نه
+    if not os.path.exists('cookies.txt'):
+        raise Exception("فایل cookies.txt تو سرور پیدا نشد! مطمئن شو تو گیت‌هاب کنار main.py گذاشتیش.")
+
     ydl_opts = {
+        'format': 'best', # ساده‌ترین حالت دانلود
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'quiet': False,  # تغییر این بخش تا ارور دقیق نشون داده بشه
-        'no_warnings': False,
+        'quiet': True,
+        'no_warnings': True,
         'cookiefile': 'cookies.txt',
         'noplaylist': True,
     }
@@ -77,7 +83,6 @@ async def download_worker():
             if os.path.exists(file_path):
                 os.remove(file_path)
         except Exception as e:
-            # ارسال متن کامل ارور برای بررسی دقیق‌تر
             await event.reply(f"❌ خطا در دانلود ویدیو:\n`{e}`")
         finally:
             download_queue.task_done()
