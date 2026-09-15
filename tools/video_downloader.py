@@ -25,7 +25,8 @@ def download_video(url):
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        # جا زدن به عنوان تلویزیون و آیفون
+        # استفاده از فایل کوکی برای دور زدن بلاک بات یوتیوب
+        'cookiefile': 'cookies.txt',
         'extractor_args': {'youtube': {'player_client': ['tv', 'ios', 'android', 'web']}}
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
