@@ -21,12 +21,11 @@ download_queue = asyncio.Queue()
 def download_video(url):
     import yt_dlp
     ydl_opts = {
-        'format': 'bestvideo*+bestaudio/best', # بهترین کیفیت موجود رو پیدا میکنه
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True,
-        'merge_output_format': 'mp4', # صدا و تصویر رو به mp4 تبدیل و ادغام میکنه
-        'cookiefile': 'cookies.txt'
+        'quiet': False,  # تغییر این بخش تا ارور دقیق نشون داده بشه
+        'no_warnings': False,
+        'cookiefile': 'cookies.txt',
+        'noplaylist': True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -78,6 +77,7 @@ async def download_worker():
             if os.path.exists(file_path):
                 os.remove(file_path)
         except Exception as e:
+            # ارسال متن کامل ارور برای بررسی دقیق‌تر
             await event.reply(f"❌ خطا در دانلود ویدیو:\n`{e}`")
         finally:
             download_queue.task_done()
