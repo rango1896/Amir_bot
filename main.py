@@ -9,7 +9,7 @@ import urllib.request
 from mew_game import factory, fishing, cats
 
 # === لود کردن ماژول‌ها از پوشه piogame ===
-from piogame import shooting, smart_shoot, cooldown, art, squad
+from piogame import shooting, smart_shoot, cooldown, art, squad, ring
 
 # === لود کردن ماژول‌ها از پوشه tools ===
 from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader
