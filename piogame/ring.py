@@ -30,7 +30,7 @@ async def ring_off(event):
 def parse_panel(text):
     """استخراج لول مهارت‌ها و زمان از متن پنل"""
     skills = {}
-    # پیدا کردن لول هر مهارت
+    # پیدا کردن لول هر مهارت (با حذف فاصله‌های اضافی)
     matches = re.findall(r'•\s*(سرعت|مهارت|قدرت|سلامتی):\s*لول\s*(\d+)', text)
     for name, lvl in matches:
         skills[name] = int(lvl)
@@ -65,22 +65,33 @@ async def ring_loop(chat_id):
         try:
             # ۱. فرستادن پیو رینگ
             sent_msg = await client.send_message(chat_id, "پیو رینگ")
-            await asyncio.sleep(5) # صبر ۵ ثانیه‌ای تا ربات بازی جواب بده
             
-            # ۲. گرفتن ریپلای روی پیام خودمون
-            replies = await client.get_messages(chat_id, reply_to=sent_msg.id, limit=1)
+            panel_msg = None
             
-            if not replies or not replies[0].text or "رینگ" not in replies[0].text:
-                # اگه ریپلای نبود یا پنل نبود، ۱۰ ثانیه صبر کن و دوباره بفرست
+            # ۲. جستجوی هوشمند برای پیدا کردن پنل (تا ۱۵ ثانیه)
+            for _ in range(3):
+                await asyncio.sleep(5) # هر ۵ ثانیه یه بار چک میکنه
+                # اسکن ۵ پیام آخر چت
+                async for msg in client.iter_messages(chat_id, limit=5):
+                    # اگه پیام بعد از دستور ما بود و توش این کلمات بود، همون پنله!
+                    if msg.id > sent_msg.id and msg.text and "انرژی:" in msg.text and "لول" in msg.text:
+                        panel_msg = msg
+                        break
+                if panel_msg:
+                    break # پنل پیدا شد، برو برای ارتقا
+                    
+            if not panel_msg:
+                # اگه بعد از ۱۵ ثانیه پنل پیدا نشد
+                print("❗ پنل رینگ پیدا نشد، دوباره تلاش میکنم...")
                 await asyncio.sleep(10)
                 continue
                 
-            panel_msg = replies[0] # پنل رو ریپلای شده گرفتیم
             text = panel_msg.text
             
             # ۳. تحلیل پنل
             skills, sleep_secs = parse_panel(text)
             if not skills:
+                print("❗ مهارت‌ها در پنل پیدا نشد!")
                 await asyncio.sleep(10)
                 continue
                 
@@ -100,16 +111,19 @@ async def ring_loop(chat_id):
             res = await click_skill(panel_msg, target_skill)
             await asyncio.sleep(2) # تاخیر ۲ ثانیه‌ای برای جلوگیری از اسپم
             
-            # ۶. بررسی پاپ‌آپ انرژی
+            # ۶. بررسی پاپ‌آپ انرژی (تقویت شده)
             if res and hasattr(res, 'message') and res.message and "انرژی" in res.message:
                 # انرژی کمه، باید بخوابه
-                await client.send_message(chat_id, f"🔋 انرژی کافی نیست. {sleep_secs//3600} ساعت و {(sleep_secs%3600)//60} دقیقه صبر میکنم...")
+                hours = sleep_secs // 3600
+                mins = (sleep_secs % 3600) // 60
+                await client.send_message(chat_id, f"🔋 انرژی کافی نیست. {hours} ساعت و {mins} دقیقه صبر میکنم...")
+                
                 # خوابیدن (با قابلیت بیدار شدن فوری اگه خاموش شد)
                 try:
                     await asyncio.sleep(sleep_secs + 60) # ۱ دقیقه اضافه برای اطمینان
                 except asyncio.CancelledError:
-                    break
-                continue
+                    break # اگه دستور خاموش زده شد، از خواب بیدار شو و تموم کن
+                continue # بعد از بیدار شدن، حلقه از اول شروع میشه
                 
             # اگه پاپ‌آپ انرژی نیومد، یعنی ارتقا انجام شده. حلقه از اول اجرا میشه و پنل جدید رو می‌خونه.
                 
