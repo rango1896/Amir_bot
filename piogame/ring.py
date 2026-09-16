@@ -29,21 +29,23 @@ async def ring_off(event):
 
 def parse_panel(text):
     """استخراج لول مهارت‌ها و زمان از متن پنل"""
+    # حذف کاراکترهای نامرئی و نامتعارف تلگرام (RTL/LTR marks)
+    clean_text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2066-\u2069]', '', text)
+    
     skills = {}
-    # فرمول نرم‌تر و هوشمندتر برای پیدا کردن مهارت‌ها
-    matches = re.findall(r'(سرعت|مهارت|قدرت|سلامتی).*?لول\s*(\d+)', text)
+    # پیدا کردن اسم مهارت و اولین عددی که بعدش میاد (بسیار قدرتمند)
+    matches = re.findall(r'(سرعت|مهارت|قدرت|سلامتی)\D*(\d+)', clean_text)
     for name, lvl in matches:
         skills[name] = int(lvl)
         
-    # پیدا کردن زمان پر شدن انرژی
-    time_match = re.search(r'(\d+)\s*ساعت\s*و\s*(\d+)\s*دقیقه', text)
+    # پیدا کردن زمان پر شدن انرژی با حذف فاصله‌های نامرئی
+    time_match = re.search(r'(\d+)\D*ساعت\D*و\D*(\d+)\D*دقیقه', clean_text)
     if time_match:
         hours = int(time_match.group(1))
         mins = int(time_match.group(2))
         return skills, (hours * 3600) + (mins * 60)
         
-    # اگه فقط دقیقه نوشته بود
-    time_match_min = re.search(r'(\d+)\s*دقیقه', text)
+    time_match_min = re.search(r'(\d+)\D*دقیقه', clean_text)
     if time_match_min:
         return skills, int(time_match_min.group(1)) * 60
         
