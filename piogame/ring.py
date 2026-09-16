@@ -30,24 +30,21 @@ async def ring_off(event):
 def parse_panel(text):
     """استخراج لول مهارت‌ها و زمان از متن پنل"""
     skills = {}
-    # پیدا کردن لول هر مهارت (با حذف فاصله‌های اضافی)
     matches = re.findall(r'•\s*(سرعت|مهارت|قدرت|سلامتی):\s*لول\s*(\d+)', text)
     for name, lvl in matches:
         skills[name] = int(lvl)
         
-    # پیدا کردن زمان پر شدن انرژی
     time_match = re.search(r'(\d+)\s*ساعت\s*و\s*(\d+)\s*دقیقه', text)
     if time_match:
         hours = int(time_match.group(1))
         mins = int(time_match.group(2))
         return skills, (hours * 3600) + (mins * 60)
         
-    # اگه فقط دقیقه نوشته بود
     time_match_min = re.search(r'(\d+)\s*دقیقه', text)
     if time_match_min:
         return skills, int(time_match_min.group(1)) * 60
         
-    return skills, 3600 # پیش‌فرض ۱ ساعت اگه زمان رو نفهمید
+    return skills, 3600
 
 async def click_skill(panel_msg, skill_name):
     """کلیک هوشمند روی دکمه مهارت مورد نظر"""
@@ -65,27 +62,33 @@ async def ring_loop(chat_id):
         try:
             # ۱. فرستادن پیو رینگ
             sent_msg = await client.send_message(chat_id, "پیو رینگ")
-            
             panel_msg = None
             
-            # ۲. جستجوی هوشمند برای پیدا کردن پنل (تا ۱۵ ثانیه)
-            for _ in range(3):
+            # ۲. جستجوی فوق‌قدرتمند برای پیدا کردن پنل (تا ۲۰ ثانیه)
+            for _ in range(4):
                 await asyncio.sleep(5) # هر ۵ ثانیه یه بار چک میکنه
-                # اسکن ۵ پیام آخر چت
-                async for msg in client.iter_messages(chat_id, limit=5):
-                    # اگه پیام بعد از دستور ما بود و توش این کلمات بود، همون پنله!
-                    if msg.id > sent_msg.id and msg.text and "انرژی:" in msg.text and "لول" in msg.text:
-                        panel_msg = msg
-                        break
+                
+                # خوندن ۱۰ پیام آخر گروه
+                messages = await client.get_messages(chat_id, limit=10)
+                for msg in messages:
+                    # اگه پیام از طرف خودمون نبود و توش کلمات کلیدی پنل بود
+                    if not msg.out and msg.text and "انرژی" in msg.text and "لول" in msg.text:
+                        # اگه زمان پیام، بعد از زمان فرستادن دستور ما بود (یا ریپلای بود)
+                        if msg.id > sent_msg.id or msg.reply_to_msg_id == sent_msg.id:
+                            panel_msg = msg
+                            break
                 if panel_msg:
                     break # پنل پیدا شد، برو برای ارتقا
                     
             if not panel_msg:
-                # اگه بعد از ۱۵ ثانیه پنل پیدا نشد
+                # اگه بعد از ۲۰ ثانیه پنل پیدا نشد
                 print("❗ پنل رینگ پیدا نشد، دوباره تلاش میکنم...")
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
                 continue
                 
+            # پیام تایید برای اینکه بدونی ربات پنل رو دیده
+            await client.send_message(chat_id, "✅ پنل تشخیص داده شد! در حال پردازش مهارت‌ها...")
+            
             text = panel_msg.text
             
             # ۳. تحلیل پنل
@@ -111,25 +114,23 @@ async def ring_loop(chat_id):
             res = await click_skill(panel_msg, target_skill)
             await asyncio.sleep(2) # تاخیر ۲ ثانیه‌ای برای جلوگیری از اسپم
             
-            # ۶. بررسی پاپ‌آپ انرژی (تقویت شده)
+            # ۶. بررسی پاپ‌آپ انرژی
             if res and hasattr(res, 'message') and res.message and "انرژی" in res.message:
                 # انرژی کمه، باید بخوابه
                 hours = sleep_secs // 3600
                 mins = (sleep_secs % 3600) // 60
                 await client.send_message(chat_id, f"🔋 انرژی کافی نیست. {hours} ساعت و {mins} دقیقه صبر میکنم...")
                 
-                # خوابیدن (با قابلیت بیدار شدن فوری اگه خاموش شد)
                 try:
                     await asyncio.sleep(sleep_secs + 60) # ۱ دقیقه اضافه برای اطمینان
                 except asyncio.CancelledError:
-                    break # اگه دستور خاموش زده شد، از خواب بیدار شو و تموم کن
+                    break # اگه دستور خاموش زده شد، بیدار شو و تموم کن
                 continue # بعد از بیدار شدن، حلقه از اول شروع میشه
                 
             # اگه پاپ‌آپ انرژی نیومد، یعنی ارتقا انجام شده. حلقه از اول اجرا میشه و پنل جدید رو می‌خونه.
                 
         except asyncio.CancelledError:
-            # اگه دستور خاموش رو زدیم، حلقه ترک میشه
             break
         except Exception as e:
             print(f"❌ خطا در حلقه رینگ: {e}")
-            await asyncio.sleep(15) # اگه اروری داد، ۱۵ ثانیه صبر کن و دوباره تلاش کن
+            await asyncio.sleep(15)
