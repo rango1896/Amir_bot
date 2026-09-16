@@ -30,17 +30,19 @@ async def ring_off(event):
 def parse_panel(text):
     """استخراج لول مهارت‌ها و زمان از متن پنل"""
     skills = {}
-    # اصلاح رِجکس برای اینکه حتی اگه فاصله‌ها عجیب بودن بتونه بخونه
-    matches = re.findall(r'(سرعت|مهارت|قدرت|سلامتی)\s*:\s*لول\s*(\d+)', text)
+    # فرمول نرم‌تر و هوشمندتر برای پیدا کردن مهارت‌ها
+    matches = re.findall(r'(سرعت|مهارت|قدرت|سلامتی).*?لول\s*(\d+)', text)
     for name, lvl in matches:
         skills[name] = int(lvl)
         
+    # پیدا کردن زمان پر شدن انرژی
     time_match = re.search(r'(\d+)\s*ساعت\s*و\s*(\d+)\s*دقیقه', text)
     if time_match:
         hours = int(time_match.group(1))
         mins = int(time_match.group(2))
         return skills, (hours * 3600) + (mins * 60)
         
+    # اگه فقط دقیقه نوشته بود
     time_match_min = re.search(r'(\d+)\s*دقیقه', text)
     if time_match_min:
         return skills, int(time_match_min.group(1)) * 60
@@ -53,7 +55,6 @@ async def click_skill(panel_msg, skill_name):
         return None
     for row in panel_msg.buttons:
         for button in row:
-            # بررسی میکنه اگه اسم مهارت تو دکمه بود
             if skill_name in button.text:
                 return await button.click()
     return None
@@ -90,9 +91,8 @@ async def ring_loop(chat_id):
             # ۳. تحلیل پنل
             skills, sleep_secs = parse_panel(text)
             
-            # --- بخش عیب‌یابی ---
             if not skills:
-                await client.send_message(chat_id, "❗ خطا: نتونستم لول‌ها رو از متن بخونم!")
+                await client.send_message(chat_id, "❗ خطا: هنوز نتونستم لول‌ها رو بخونم!")
                 await asyncio.sleep(10)
                 continue
                 
@@ -111,13 +111,12 @@ async def ring_loop(chat_id):
             # ۵. کلیک روی دکمه
             res = await click_skill(panel_msg, target_skill)
             
-            # --- بخش عیب‌یابی دکمه ---
             if res is None:
                 await client.send_message(chat_id, f"❗ خطا: دکمه {target_skill} تو پنل پیدا نشد!")
                 await asyncio.sleep(10)
                 continue
                 
-            await asyncio.sleep(2) # تاخیر برای اینکه ربات بازی پنل رو آپدیت کنه
+            await asyncio.sleep(2) # تاخیر برای آپدیت شدن پنل بازی
             
             # ۶. بررسی پاپ‌آپ انرژی
             if res and hasattr(res, 'message') and res.message and "انرژی" in res.message:
@@ -130,9 +129,6 @@ async def ring_loop(chat_id):
                 except asyncio.CancelledError:
                     break 
                 continue 
-                
-            # اگه به اینجا رسیدیم، یعنی کلیک موفقیت‌آمیز بوده و پاپ‌آپ انرژی نیومده.
-            # حلقه از اول اجرا میشه تا پنل جدید رو بخونه.
                 
         except asyncio.CancelledError:
             break
