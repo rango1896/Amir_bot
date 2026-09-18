@@ -93,7 +93,8 @@ async def main():
     asyncio.ensure_future(squad.squad_loop())
     asyncio.ensure_future(art.art_loop())
     asyncio.ensure_future(video_downloader.start_download_worker())
-    
+    asyncio.ensure_future(ring.start_ring_if_active())
+
     await core.client.run_until_disconnected()
 
 def keep_alive():
