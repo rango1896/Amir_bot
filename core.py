@@ -9,22 +9,19 @@ from telethon.tl.functions.account import UpdateProfileRequest
 
 API_ID = 17349
 API_HASH = "344583e45741c457fe1862106095a5eb"
-TARGET_GROUP = -1004290700072  # گروه بازی خودت
+TARGET_GROUP = -1004290700072
 group_entity = None
 
-# === استفاده از استرینگ سشن برای رندر ===
 MASTER_SESSION = "1BJWap1wBu8O4UESk3VHZPpuIXdc8PMzfYUKhxpy5bjCRohf1vOpCGmrKwuTFdIL3VRC_dQ_HDTFZFEQGp0ktrnmJ0GSShQklPMcuie8jwtJny9RcuMF8CHsxbRNDprqmZBcv_oO84iPRje1eCH4NneHKkRJFsij2IFljGaM_FpM11GjyvQ_r4IngKjn5stx89McZP-ptmxrZgpLh81T0LHJ-DvFt6Ez9X8-2RYB8FpsPZ7pDE36GxdWroBFugoYj5uGx1TcBCtqs8L5y3_J0QQwgG3ODQ8xhjnmCyniu3govwu2U4Y6QciqZXsHhQVP9B0XNzwLtIXCj3iBD84OEu3B_UfqtXq0="
 client = TelegramClient(StringSession(MASTER_SESSION), API_ID, API_HASH)
-# ==========================================
 
-# === متغیرهای مشترک ربات ===
 collect_points_active = False
 fishing_active = False
 stray_cat_active = True
 factory_active = False
 
 DB_TAG = "#DB_AMIR"
-DB_CHAT = "hankhhh" # گروهی که دیتابیس اصلی توش ذخیره میشه
+DB_CHAT = "hankhhh"
 anti_delete_active = False
 anti_delete_targets = {}
 message_cache = {}
@@ -36,17 +33,16 @@ tag_targets = {}
 notes_list = []
 auto_react_targets = {}
 multi_active_reactions = {}
-downloader_whitelist = set()  # <--- لیست سفید برای دانلودر
+downloader_whitelist = set()
+ring_active_status = False  # <--- متغیر جدید برای وضعیت رینگ
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
-# === متغیرهای پیو ===
 DB_PIOU_TAG = "#DB_PIOU"
 pio_active_group = None
 pio_target_links = {}
 next_shoot_time = 0
 
-# === توابع کمکی ===
 def fa_to_en_digits(text):
     persian_digits = '۰۱۲۳۴۵۶۷۸۹'
     english_digits = '0123456789'
@@ -73,10 +69,9 @@ def strip_clock(name):
             return parts[0]
     return name
 
-# === توابع دیتابیس تلگرامی ===
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist
+    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist, ring_active_status
     
     async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
@@ -90,7 +85,8 @@ async def load_db():
                     keywords_list = set(data.get("keywords", []))
                     auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
                     multi_active_reactions = {int(k): v for k, v in data.get("multi_reactions", {}).items()}
-                    downloader_whitelist = set(data.get("downloader_whitelist", [])) # لود لیست دانلودر
+                    downloader_whitelist = set(data.get("downloader_whitelist", []))
+                    ring_active_status = data.get("ring_active", False) # لود وضعیت رینگ
                     print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
@@ -117,7 +113,8 @@ async def save_db():
         "keywords": list(keywords_list),
         "reactions": {str(k): v for k, v in auto_react_targets.items()},
         "multi_reactions": {str(k): v for k, v in multi_active_reactions.items()},
-        "downloader_whitelist": list(downloader_whitelist) # ذخیره لیست دانلودر
+        "downloader_whitelist": list(downloader_whitelist),
+        "ring_active": ring_active_status # ذخیره وضعیت رینگ
     }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_TAG} {json_str}"
