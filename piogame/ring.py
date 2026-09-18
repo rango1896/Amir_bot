@@ -5,30 +5,38 @@ from telethon import events
 import core
 from core import client
 
-ring_active = False
 ring_task = None
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^رینگ روشن$'))
 async def ring_on(event):
-    global ring_active, ring_task
-    if not ring_active:
+    global ring_task
+    if not core.ring_active_status:
         if not core.pio_active_group:
             return await event.reply("❗ اول با دستور `اد لینک` یه پیام هدف ثبت کن!")
-        ring_active = True
+        core.ring_active_status = True
+        await core.save_db()
         await event.reply("🏋️ سیستم رینگ **روشن** شد.")
         if ring_task is None or ring_task.done():
             ring_task = asyncio.create_task(ring_loop(core.pio_active_group))
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^رینگ خاموش$'))
 async def ring_off(event):
-    global ring_active, ring_task
-    ring_active = False
+    global ring_task
+    core.ring_active_status = False
+    await core.save_db()
     if ring_task and not ring_task.done():
         ring_task.cancel()
     await event.reply("🛑 سیستم رینگ **خاموش** شد.")
 
+async def start_ring_if_active():
+    """این تابع توسط main.py صدا زده میشه تا اگه رینگ قبلا روشن بوده، خودکار استارت بخوره"""
+    global ring_task
+    if core.ring_active_status and core.pio_active_group:
+        if ring_task is None or ring_task.done():
+            print("✅ رینگ از قبل روشن بوده، دوباره استارت میشه...")
+            ring_task = asyncio.create_task(ring_loop(core.pio_active_group))
+
 def parse_panel(text):
-    """استخراج لول مهارت‌ها و زمان از متن پنل"""
     clean_text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2066-\u2069]', '', text)
     skills = {}
     matches = re.findall(r'(سرعت|مهارت|قدرت|سلامتی)\D*(\d+)', clean_text)
@@ -54,14 +62,11 @@ async def click_skill(panel_msg, skill_name):
     return None
 
 async def ring_loop(chat_id):
-    """حلقه اصلی ربات رینگ"""
-    while ring_active:
+    while core.ring_active_status:
         panel_msg = None
         try:
-            # ۱. فرستادن یک‌باره پیو رینگ
             sent_msg = await client.send_message(chat_id, "پیو رینگ")
             
-            # ۲. جستجو برای پیدا کردن پنل (تا ۲۰ ثانیه)
             for _ in range(4):
                 await asyncio.sleep(5)
                 messages = await client.get_messages(chat_id, limit=10)
@@ -73,20 +78,18 @@ async def ring_loop(chat_id):
                 if panel_msg: break
                     
             if not panel_msg:
-                # اگه پنل پیدا نشد، ۳۰ تا ۶۰ ثانیه صبر کن و دوباره بفرست
                 await asyncio.sleep(random.randint(30, 60))
                 continue
                 
             await client.send_message(chat_id, "✅ پنل تشخیص داده شد! در حال پردازش...")
             
-            # ۳. حلقه ارتقا (رفرش کردن پنل بدون اسپم)
-            while ring_active:
+            while core.ring_active_status:
                 text = panel_msg.text
                 skills, sleep_secs = parse_panel(text)
                 
                 if not skills:
                     await client.send_message(chat_id, "❗ خطا: نتونستم لول‌ها رو از متن بخونم! پنل گم شد.")
-                    break # پنل گم شد، میه بیرون حلقه تا ۳۰-۶۰ ثانیه صبر کنه
+                    break 
                     
                 levels = list(skills.values())
                 min_lvl = min(levels)
@@ -99,15 +102,13 @@ async def ring_loop(chat_id):
                     target_skill = [k for k, v in skills.items() if v == min_lvl][0]
                     await client.send_message(chat_id, f"🎯 کمترین لول: {target_skill} ({min_lvl}). در حال ارتقا...")
                     
-                # کلیک روی دکمه
                 res = await click_skill(panel_msg, target_skill)
                 if res is None:
                     await client.send_message(chat_id, f"❗ خطا: دکمه {target_skill} تو پنل پیدا نشد!")
-                    break # دکمه گم شد، میره بیرون حلقه
+                    break
                     
-                await asyncio.sleep(2.5) # تاخیر برای ویرایش پنل توسط ربات بازی
+                await asyncio.sleep(2.5) 
                 
-                # ۴. بررسی پاپ‌آپ انرژی
                 if res and hasattr(res, 'message') and res.message and "انرژی" in res.message:
                     hours = sleep_secs // 3600
                     mins = (sleep_secs % 3600) // 60
@@ -116,20 +117,18 @@ async def ring_loop(chat_id):
                         await asyncio.sleep(sleep_secs + 60) 
                     except asyncio.CancelledError:
                         return
-                    break # بعد از بیداری، حلقه خارج میشه تا دوباره پیو رینگ بفرسته
+                    break 
                 
-                # ۵. آپدیت کردن پنل بدون ارسال پیام جدید
                 try:
                     updated_msg = await client.get_messages(chat_id, ids=panel_msg.id)
                     if updated_msg and updated_msg.text and "انرژی" in updated_msg.text:
-                        panel_msg = updated_msg # پنل جدید رو جایگزین کردیم، حلقه ادامه پیدا میکنه
+                        panel_msg = updated_msg
                     else:
-                        break # پنل دیگه وجود نداشت یا ادیت نشده بود، برو بیرون حلقه
+                        break 
                 except:
-                    break # ارور داد، برو بیرون حلقه
+                    break 
                     
-            # اگه از حلقه بیرون اومدیم (پنل گم شد)، ۳۰ تا ۶۰ ثانیه صبر کن بعد دوباره پیو رینگ بفرسته
-            if ring_active:
+            if core.ring_active_status:
                 await asyncio.sleep(random.randint(30, 60))
                 
         except asyncio.CancelledError:
