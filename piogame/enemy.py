@@ -6,42 +6,65 @@ from core import client
 # متغیر برای نگه داشتن آیدی گروهی که دشمن در اون فعال شده
 enemy_active_chat = None
 
+async def send_debug(text):
+    """ارسال لاگ‌های دیباگ به پیام‌های ذخیره شده"""
+    print(f"🐞 DEBUG: {text}") # پرینت تو کنسول رندر
+    try:
+        await client.send_message('me', f"🐞 **[دیباگ دشمن]**:\n\n{text}")
+    except:
+        pass
+
 async def enemy_loop():
     """چرخه شلیک به دشمنان هر ۱۵ ثانیه یکبار در گروه فعلی"""
     global enemy_active_chat
     while core.enemy_active:
         try:
             if not enemy_active_chat:
-                await asyncio.sleep(5)
+                await send_debug("گروه فعال مشخص نیست! (None). شاید ربات ری‌استارت شده. لطفا دوباره 'دشمن روشن' بزن.")
+                await asyncio.sleep(15)
+                continue
+                
+            if not core.enemy_targets:
+                await send_debug("لیست دشمن‌ها خالیه! کسی برای شلیک وجود نداره.")
+                await asyncio.sleep(15)
                 continue
                 
             for enemy_id, info in list(core.enemy_targets.items()):
                 try:
+                    # ۱. پیدا کردن شخص
                     entity = await client.get_entity(int(enemy_id))
                     
-                    # پیدا کردن آخرین پیام دشمن در همون گروهی که روشن شده
+                    # ۲. پیدا کردن آخرین پیام شخص تو گروه
                     target_msg = None
-                    async for msg in client.iter_messages(enemy_active_chat, from_user=entity.id, limit=1):
-                        target_msg = msg
-                        break
+                    try:
+                        async for msg in client.iter_messages(enemy_active_chat, from_user=entity, limit=1):
+                            target_msg = msg
+                            break
+                    except Exception as search_err:
+                        await send_debug(f"❌ خطا در جستجوی پیام {info['name']}:\n`{search_err}`")
+                        continue
                         
+                    # ۳. شلیک و پاک کردن
                     if target_msg:
-                        # شلیک و پاک کردن
-                        shoot_msg = await client.send_message(enemy_active_chat, "شلیک", reply_to=target_msg.id)
-                        await asyncio.sleep(3)
-                        await shoot_msg.delete()
-                        print(f"✅ شلیک به {info['name']} انجام شد.")
+                        try:
+                            shoot_msg = await client.send_message(enemy_active_chat, "شلیک", reply_to=target_msg.id)
+                            await asyncio.sleep(3)
+                            await shoot_msg.delete()
+                            # پیام موفقیت رو فقط تو کنسول میدیم که Saved Messages اسپم نشه
+                            print(f"✅ شلیک به {info['name']} انجام شد.") 
+                        except Exception as shoot_err:
+                            await send_debug(f"❌ خطا در ارسال/پاک کردن شلیک به {info['name']}:\n`{shoot_err}`")
                     else:
-                        print(f"⚠️ پیامی برای {info['name']} تو گروه پیدا نشد.")
+                        await send_debug(f"⚠️ پیامی برای {info['name']} تو گروه پیدا نشد. (شاید اخیراً پیام نداده)")
                         
                 except Exception as e:
-                    print(f"❌ خطا در شلیک به دشمن {enemy_id}: {e}")
+                    await send_debug(f"❌ خطای کلی در پردازش دشمن {enemy_id}:\n`{e}`")
                     
             # ۱۵ ثانیه صبر
             await asyncio.sleep(15)
             
         except Exception as e:
-            print(f"❌ Enemy loop error: {e}")
+            await send_debug(f"❌ خطای اصلی در چرخه دشمن (خارج از حلقه):\n`{e}`")
             await asyncio.sleep(15)
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^دشمن روشن$'))
