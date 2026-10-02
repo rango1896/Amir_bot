@@ -16,29 +16,36 @@ async def enemy_loop():
                     shot_fired = False
                     for chat in common_chats:
                         try:
-                            # Find the latest message from the enemy in this chat
+                            # استفاده از فیلتر from_user که کل تاریخچه رو میگرده و سریع‌ترین روشه
+                            target_msg = None
                             async for msg in client.iter_messages(chat.id, from_user=entity.id, limit=1):
-                                if msg:
-                                    # Send "شلیک" as a reply
-                                    shoot_msg = await client.send_message(chat.id, "شلیک", reply_to=msg.id)
-                                    await asyncio.sleep(3) # wait 3 seconds
-                                    await shoot_msg.delete() # delete the "شلیک" message
-                                    shot_fired = True
-                                    break # move to next enemy
-                        except:
-                            pass
+                                target_msg = msg
+                                break
+                            
+                            # اگر پیام دشمن رو پیدا کرد
+                            if target_msg:
+                                # ارسال شلیک
+                                shoot_msg = await client.send_message(chat.id, "شلیک", reply_to=target_msg.id)
+                                await asyncio.sleep(3) # ۳ ثانیه صبر
+                                await shoot_msg.delete() # پاک کردن پیام شلیک
+                                shot_fired = True
+                                print(f"✅ شلیک به {info['name']} در گروه {chat.title} انجام شد.")
+                                break # میره سراغ دشمن بعدی
+                                
+                        except Exception as e:
+                            print(f"⚠️ خطا در شلیک داخل گروه {chat.id}: {e}")
                         
                         if shot_fired:
-                            break # break the chat loop
+                            break # شکستن حلقه گروه‌ها
                             
                 except Exception as e:
-                    print(f"Error shooting enemy {enemy_id}: {e}")
+                    print(f"❌ خطا در پردازش دشمن {enemy_id}: {e}")
             
             # Wait 15 seconds for the next round
             await asyncio.sleep(15)
             
         except Exception as e:
-            print(f"Enemy loop error: {e}")
+            print(f"❌ Enemy loop error: {e}")
             await asyncio.sleep(15)
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^دشمن روشن$'))
@@ -55,7 +62,7 @@ async def enemy_on(event):
             try:
                 await msg.delete()
                 deleted_count += 1
-                await asyncio.sleep(0.1) # small delay to avoid flood
+                await asyncio.sleep(0.2) #small delay
             except:
                 pass
                 
