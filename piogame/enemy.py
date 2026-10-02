@@ -3,45 +3,41 @@ from telethon import events
 import core
 from core import client
 
+# متغیر برای نگه داشتن آیدی گروهی که دشمن در اون فعال شده
+enemy_active_chat = None
+
 async def enemy_loop():
-    """چرخه شلیک به دشمنان هر ۱۵ ثانیه یکبار"""
+    """چرخه شلیک به دشمنان هر ۱۵ ثانیه یکبار در گروه فعلی"""
+    global enemy_active_chat
     while core.enemy_active:
         try:
-            # Iterate over a copy of the dictionary
+            if not enemy_active_chat:
+                await asyncio.sleep(5)
+                continue
+                
             for enemy_id, info in list(core.enemy_targets.items()):
                 try:
                     entity = await client.get_entity(int(enemy_id))
-                    common_chats = await client.get_common_chats(entity)
                     
-                    shot_fired = False
-                    for chat in common_chats:
-                        try:
-                            # استفاده از فیلتر from_user که کل تاریخچه رو میگرده و سریع‌ترین روشه
-                            target_msg = None
-                            async for msg in client.iter_messages(chat.id, from_user=entity.id, limit=1):
-                                target_msg = msg
-                                break
-                            
-                            # اگر پیام دشمن رو پیدا کرد
-                            if target_msg:
-                                # ارسال شلیک
-                                shoot_msg = await client.send_message(chat.id, "شلیک", reply_to=target_msg.id)
-                                await asyncio.sleep(3) # ۳ ثانیه صبر
-                                await shoot_msg.delete() # پاک کردن پیام شلیک
-                                shot_fired = True
-                                print(f"✅ شلیک به {info['name']} در گروه {chat.title} انجام شد.")
-                                break # میره سراغ دشمن بعدی
-                                
-                        except Exception as e:
-                            print(f"⚠️ خطا در شلیک داخل گروه {chat.id}: {e}")
+                    # پیدا کردن آخرین پیام دشمن در همون گروهی که روشن شده
+                    target_msg = None
+                    async for msg in client.iter_messages(enemy_active_chat, from_user=entity.id, limit=1):
+                        target_msg = msg
+                        break
                         
-                        if shot_fired:
-                            break # شکستن حلقه گروه‌ها
-                            
+                    if target_msg:
+                        # شلیک و پاک کردن
+                        shoot_msg = await client.send_message(enemy_active_chat, "شلیک", reply_to=target_msg.id)
+                        await asyncio.sleep(3)
+                        await shoot_msg.delete()
+                        print(f"✅ شلیک به {info['name']} انجام شد.")
+                    else:
+                        print(f"⚠️ پیامی برای {info['name']} تو گروه پیدا نشد.")
+                        
                 except Exception as e:
-                    print(f"❌ خطا در پردازش دشمن {enemy_id}: {e}")
-            
-            # Wait 15 seconds for the next round
+                    print(f"❌ خطا در شلیک به دشمن {enemy_id}: {e}")
+                    
+            # ۱۵ ثانیه صبر
             await asyncio.sleep(15)
             
         except Exception as e:
@@ -50,19 +46,23 @@ async def enemy_loop():
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^دشمن روشن$'))
 async def enemy_on(event):
+    global enemy_active_chat
     if not core.enemy_active:
         core.enemy_active = True
+        # ذخیره گروهی که توش دستور داده شد
+        enemy_active_chat = event.chat_id
         await core.save_db()
-        await event.reply("🎯 سیستم دشمن روشن شد! در حال پاک کردن ۱۵۰ پیام آخر...")
         
-        # Delete last 150 messages sent by me in this chat
+        await event.reply("🎯 سیستم دشمن تو همین گروه روشن شد!\nدر حال پاک کردن ۱۵۰ پیام آخر شما...")
+        
+        # پاک کردن ۱۵۰ پیام آخر شما
         deleted_count = 0
         me = await client.get_me()
         async for msg in client.iter_messages(event.chat_id, from_user=me.id, limit=150):
             try:
                 await msg.delete()
                 deleted_count += 1
-                await asyncio.sleep(0.2) #small delay
+                await asyncio.sleep(0.2)
             except:
                 pass
                 
