@@ -5,11 +5,8 @@ import threading
 from telethon import events
 import urllib.request
 
-# === لود کردن ماژول‌ها از پوشه mew_game ===
-from mew_game import factory, fishing, cats
-
 # === لود کردن ماژول‌ها از پوشه piogame ===
-from piogame import shooting, smart_shoot, cooldown, art, squad, ring
+from piogame import shooting, smart_shoot, cooldown, art, squad, ring, enemy
 
 # === لود کردن ماژول‌ها از پوشه tools ===
 from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader, animation
@@ -59,10 +56,6 @@ async def turn_on_all(event):
     core.ghost_mode_active = True
     smart_shoot.smart_active = True
     
-    if not core.factory_active:
-        core.factory_active = True
-        asyncio.ensure_future(factory.factory_cycle())
-        
     if hasattr(reactions, 'react_active'):
         reactions.react_active = True
 
@@ -81,10 +74,6 @@ async def main():
         
     print("✅ سلف‌بات Amir روشن شد!")
     
-    asyncio.ensure_future(cats.meow_loop())
-    asyncio.ensure_future(cats.update_name_clock())
-    asyncio.ensure_future(fishing.collect_points_loop())
-    asyncio.ensure_future(fishing.fishing_loop())
     asyncio.ensure_future(misc.schedule_loop())
     asyncio.ensure_future(shooting.meat_loop())
     asyncio.ensure_future(shooting.blind_shot_loop())
