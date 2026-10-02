@@ -34,7 +34,9 @@ notes_list = []
 auto_react_targets = {}
 multi_active_reactions = {}
 downloader_whitelist = set()
-ring_active_status = False  # <--- متغیر جدید برای وضعیت رینگ
+ring_active_status = False
+enemy_active = False  # <--- متغیر جدید برای وضعیت دشمن
+enemy_targets = {}    # <--- متغیر جدید برای لیست دشمنان
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
@@ -71,7 +73,7 @@ def strip_clock(name):
 
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist, ring_active_status
+    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist, ring_active_status, enemy_active, enemy_targets
     
     async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
@@ -86,7 +88,9 @@ async def load_db():
                     auto_react_targets = {int(k): v for k, v in data.get("reactions", {}).items()}
                     multi_active_reactions = {int(k): v for k, v in data.get("multi_reactions", {}).items()}
                     downloader_whitelist = set(data.get("downloader_whitelist", []))
-                    ring_active_status = data.get("ring_active", False) # لود وضعیت رینگ
+                    ring_active_status = data.get("ring_active", False)
+                    enemy_active = data.get("enemy_active", False)
+                    enemy_targets = data.get("enemy_targets", {})
                     print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
@@ -114,7 +118,9 @@ async def save_db():
         "reactions": {str(k): v for k, v in auto_react_targets.items()},
         "multi_reactions": {str(k): v for k, v in multi_active_reactions.items()},
         "downloader_whitelist": list(downloader_whitelist),
-        "ring_active": ring_active_status # ذخیره وضعیت رینگ
+        "ring_active": ring_active_status,
+        "enemy_active": enemy_active,
+        "enemy_targets": enemy_targets
     }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_TAG} {json_str}"
