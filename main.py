@@ -6,7 +6,7 @@ from telethon import events
 import urllib.request
 
 # === لود کردن ماژول‌ها از پوشه piogame ===
-from piogame import shooting, smart_shoot, cooldown, art, squad, ring, enemy
+from piogame import shooting, smart_shoot, cooldown, art, squad, ring, enemy, dungeon
 
 # === لود کردن ماژول‌ها از پوشه tools ===
 from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader, animation
