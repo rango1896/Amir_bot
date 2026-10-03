@@ -61,7 +61,7 @@ async def enemy_loop():
                     await send_debug(f"❌ خطای کلی در پردازش دشمن {enemy_id}:\n`{e}`")
                     
             # ۱۵ ثانیه صبر
-            await asyncio.sleep(15)
+            await asyncio.sleep(30)
             
         except Exception as e:
             await send_debug(f"❌ خطای اصلی در چرخه دشمن (خارج از حلقه):\n`{e}`")
