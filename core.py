@@ -36,7 +36,9 @@ multi_active_reactions = {}
 downloader_whitelist = set()
 ring_active_status = False
 enemy_active = False  # <--- متغیر جدید برای وضعیت دشمن
-enemy_targets = {}    # <--- متغیر جدید برای لیست دشمنان
+enemy_targets = {} 
+# <--- متغیر جدید برای لیست دشمنان
+dungeon_active = False
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
