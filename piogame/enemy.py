@@ -4,7 +4,7 @@ from telethon import events
 import core
 from core import client
 
-# دیکشنری برای نگه داشتن زمان مرگ دشمن‌ها (enemy_id: timestamp)
+# دیکشنری برای نگه داشتن زمان مرگ دشمن‌ها
 dead_enemies = {}
 
 async def send_debug(text):
@@ -16,7 +16,7 @@ async def send_debug(text):
         pass
 
 async def enemy_loop():
-    """چرخه شلیک به دشمنان هر ۱۵ ثانیه یکبار در گروه فعلی"""
+    """چرخه شلیک به دشمنان هر ۱۵ ثانیه یکبار"""
     while core.enemy_active:
         try:
             if not core.enemy_active_chat:
@@ -43,16 +43,29 @@ async def enemy_loop():
                     if enemy_id in dead_enemies:
                         continue
                         
-                    # پیدا کردن آخرین پیام شخص تو گروه با اسکن ۱۰۰ پیام اخیر (بدون نیاز به Entity)
+                    # --- حل مشکل Entity --- 
+                    # اول سعی میکنیم با یوزرنیم شخص رو پیدا کنیم تا تلگرام بشناسه‌اش
+                    entity = None
+                    try:
+                        if info.get('username') and info['username'] != "None":
+                            entity = await client.get_entity(info['username'])
+                        else:
+                            entity = await client.get_entity(int(enemy_id))
+                    except:
+                        pass # اگه نشد، پایین دستور جایگزین داره
+                        
+                    # پیدا کردن آخرین پیام شخص (جستجوی سریع و عمیق در کل تاریخچه مثل قبل)
                     target_msg = None
-                    async for msg in client.iter_messages(core.enemy_active_chat, limit=100):
-                        if str(msg.sender_id) == str(enemy_id):
+                    if entity:
+                        async for msg in client.iter_messages(core.enemy_active_chat, from_user=entity, limit=1):
                             target_msg = msg
-                            # آپدیت اسم دشمن اگه نامشخص بود
-                            if info['name'] == "Unknown" and msg.sender:
-                                core.enemy_targets[enemy_id]['name'] = msg.sender.first_name or "Unknown"
-                                await core.save_db()
                             break
+                    else:
+                        # اگه یوزرنیم نداشت و با آیدی نشناخت، میره ۲۰۰ پیام اخیر رو می‌گرده
+                        async for msg in client.iter_messages(core.enemy_active_chat, limit=200):
+                            if str(msg.sender_id) == str(enemy_id):
+                                target_msg = msg
+                                break
                         
                     # شلیک و پاک کردن
                     if target_msg:
@@ -61,7 +74,7 @@ async def enemy_loop():
                             await asyncio.sleep(1.5)
                             await shoot_msg.delete()
                             
-                            # بررسی اینکه آیا دشمن کشته شده یا خیر (چک کردن ۳ پیام اخیر)
+                            # بررسی اینکه آیا دشمن کشته شده یا خیر
                             await asyncio.sleep(2)
                             recent_msgs = await client.get_messages(core.enemy_active_chat, limit=3)
                             is_dead = False
@@ -76,9 +89,9 @@ async def enemy_loop():
                                 await send_debug(f"☠️ {info['name']} مُرد!\nربات به مدت 10 دقیقه بهش شلیک نمی‌کنه.")
                         
                         except Exception as shoot_err:
-                            await send_debug(f"❌ خطا در ارسال/پاک کردن شلیک به {info['name']}:\n`{shoot_err}`")
+                            await send_debug(f"❌ خطا در شلیک به {info['name']}:\n`{shoot_err}`")
                     else:
-                        pass # پیامی تو ۱۰۰ پیام اخیر پیدا نشده
+                        await send_debug(f"⚠️ پیامی برای {info['name']} تو گروه پیدا نشد. صبر می‌کنم تا پیام بده.")
                         
                 except Exception as e:
                     await send_debug(f"❌ خطای کلی در پردازش دشمن {enemy_id}:\n`{e}`")
@@ -93,7 +106,7 @@ async def enemy_loop():
 async def enemy_on(event):
     if not core.enemy_active:
         core.enemy_active = True
-        core.enemy_active_chat = event.chat_id # ذخیره تو دیتابیس
+        core.enemy_active_chat = event.chat_id
         await core.save_db()
         
         start_msg = await event.reply("🎯 سیستم دشمن تو همین گروه روشن شد!\nدر حال پاک کردن ۱۵۰ پیام آخر شما...")
@@ -127,13 +140,9 @@ async def enemy_off(event):
 async def add_enemy(event):
     target = event.pattern_match.group(1).strip()
     try:
-        # سعی میکنیم شخص رو پیدا کنیم (با یوزرنیم یا لینک)
         entity = await client.get_entity(target)
         eid_str = str(entity.id)
         
-        if eid_str in core.enemy_targets:
-            return await event.reply(f"❗ {entity.first_name} از قبل تو لیست دشمناست.")
-            
         core.enemy_targets[eid_str] = {
             "name": entity.first_name or "Unknown",
             "username": entity.username or "None"
@@ -142,13 +151,8 @@ async def add_enemy(event):
         await event.reply(f"✅ {entity.first_name} به لیست دشمن اضافه شد.")
         
     except Exception as e:
-        # اگه پیدا نشد (مثلا آیدی عددی داد و تلگرام نشناخت)، آیدی رو ذخیره میکنیم
-        # به امید اینکه تو گروه پیام بده تا ربات بشناسه‌اش
         if target.lstrip('-').isdigit():
             eid_str = target
-            if eid_str in core.enemy_targets:
-                return await event.reply("❗ این آیدی از قبل تو لیست دشمناست.")
-                
             core.enemy_targets[eid_str] = {
                 "name": "Unknown (Added by ID)",
                 "username": "None"
@@ -162,11 +166,9 @@ async def add_enemy(event):
 async def remove_enemy(event):
     target = event.pattern_match.group(1).strip()
     try:
-        # اگه یوزرنیم داد
         entity = await client.get_entity(target)
         eid_str = str(entity.id)
     except:
-        # اگه آیدی عددی داد
         eid_str = target if target.lstrip('-').isdigit() else None
         
     if eid_str and eid_str in core.enemy_targets:
