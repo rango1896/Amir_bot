@@ -9,7 +9,7 @@ import urllib.request
 from piogame import shooting, smart_shoot, cooldown, art, squad, ring, enemy, dungeon
 
 # === لود کردن ماژول‌ها از پوشه tools ===
-from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader, animation
+from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader, animation, name_clock
 
 app = Flask(__name__)
 @app.route('/')
