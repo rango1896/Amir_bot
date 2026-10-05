@@ -15,6 +15,21 @@ async def send_debug(text):
     except:
         pass
 
+# --- سیستم شکارچی (برای شناسایی کسایی که با آیدی عددی اد شدن) ---
+@client.on(events.NewMessage(incoming=True))
+async def enemy_entity_catcher(event):
+    if not core.enemy_active or not core.enemy_targets: return
+    sender_id = str(event.sender_id)
+    # اگه فرستنده پیام، تو لیست دشمن‌های ما بود و اسمش هنوز نامشخص بود
+    if sender_id in core.enemy_targets:
+        info = core.enemy_targets[sender_id]
+        if "Unknown" in info['name'] or (not info.get('username') or info['username'] == "None"):
+            # اسم و یوزرنیمش رو آپدیت می‌کنیم
+            info['name'] = event.sender.first_name or "Unknown"
+            info['username'] = event.sender.username or "None"
+            await core.save_db()
+            await send_debug(f"🎯 دشمن شناسایی شد: {info['name']} (@{info['username']})")
+
 async def enemy_loop():
     """چرخه شلیک به دشمنان هر ۱۵ ثانیه یکبار"""
     while core.enemy_active:
@@ -44,7 +59,6 @@ async def enemy_loop():
                         continue
                         
                     # --- حل مشکل Entity --- 
-                    # اول سعی میکنیم با یوزرنیم شخص رو پیدا کنیم تا تلگرام بشناسه‌اش
                     entity = None
                     try:
                         if info.get('username') and info['username'] != "None":
@@ -52,17 +66,18 @@ async def enemy_loop():
                         else:
                             entity = await client.get_entity(int(enemy_id))
                     except:
-                        pass # اگه نشد، پایین دستور جایگزین داره
+                        pass
                         
-                    # پیدا کردن آخرین پیام شخص (جستجوی سریع و عمیق در کل تاریخچه مثل قبل)
+                    # پیدا کردن آخرین پیام شخص
                     target_msg = None
                     if entity:
+                        # جستجوی سریع و عمیق (می‌تونه ۱۰۰۰۰ تا رو هم تو چند ثانیه بگرده)
                         async for msg in client.iter_messages(core.enemy_active_chat, from_user=entity, limit=1):
                             target_msg = msg
                             break
                     else:
-                        # اگه یوزرنیم نداشت و با آیدی نشناخت، میره ۲۰۰ پیام اخیر رو می‌گرده
-                        async for msg in client.iter_messages(core.enemy_active_chat, limit=200):
+                        # جستجوی دستی تو ۱۰۰۰ پیام اخیر (برای وقتی که با آیدی عددی اد شده و هنوز شناخته نشده)
+                        async for msg in client.iter_messages(core.enemy_active_chat, limit=1000):
                             if str(msg.sender_id) == str(enemy_id):
                                 target_msg = msg
                                 break
@@ -158,7 +173,7 @@ async def add_enemy(event):
                 "username": "None"
             }
             await core.save_db()
-            await event.reply(f"✅ آیدی `{target}` به لیست دشمن اضافه شد.\n⚠️ *نکته: اسمش نامشخصه. به محض اینکه تو گروه پیام بده، ربات شناخته‌اش می‌کنه و شلیک می‌کنه.*")
+            await event.reply(f"✅ آیدی `{target}` به لیست دشمن اضافه شد.\n⚠️ *نکته: ربات منتظر می‌مونه تا اون شخص تو هر گروهی پیام بده، به محض پیام دادن، شناخته‌ش می‌کنه و شلیک رو شروع می‌کنه.*")
         else:
             await event.reply(f"❌ پیدا نشد. مطمئن شو یوزرنیم درسته.\n`{e}`")
 
