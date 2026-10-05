@@ -65,6 +65,23 @@ async def rem_react(event):
     except:
         await event.reply("❗ پیدا نشد.")
 
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^لیست واکنش$'))
+async def list_reactions(event):
+    if not core.multi_active_reactions:
+        return await event.reply("📭 لیست واکنش‌ها خالیه.")
+        
+    text = "❤️ **لیست واکنش‌های فعال:**\n\n"
+    for chat_id, config in core.multi_active_reactions.items():
+        target_str = config.get("target_str", "نامشخص")
+        count = config.get("count", 0)
+        emojis = " ".join(config.get("emojis", []))
+        
+        text += f"💬 `{target_str}` (آیدی: `{chat_id}`)\n"
+        text += f"└─ تعداد: {count}\n"
+        text += f"└─ ایموجی‌ها: {emojis}\n\n"
+        
+    await event.reply(text)
+
 @core.client.on(events.NewMessage())
 async def auto_react_handler(event):
     chat_id = event.chat_id
@@ -74,7 +91,10 @@ async def auto_react_handler(event):
         emojis = config["emojis"]
         target_str = config.get("target_str")
         
-        input_peer = event.input_chat
+        # گرفتن آدرس چت (input_peer) به صورت امن برای جلوگیری از ارور NoneType
+        input_peer = await event.get_input_chat()
+        if not input_peer:
+            return # اگه چت پیدا نشد، از واکنش می‌گذریم تا ارور نده
         
         # ۱. واکنش اکانت اصلی
         emoji = random.choice(emojis)
