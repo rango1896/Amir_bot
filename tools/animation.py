@@ -106,8 +106,8 @@ async def emoji_animation_handler(event):
             # رفتن به فریم بعدی (اگه رسید آخر، برگرده اول)
             current_frame = (current_frame + 1) % frame_count
             
-            # تاخیر ۰.۴ ثانیه‌ای
-            await asyncio.sleep(0.4)
+            # تاخیر 1 ثانیه‌ای
+            await asyncio.sleep(1)
             
         except MessageNotModifiedError:
             # اگه تلگرام گیر داد که متن تکراریه، نادیده بگیر
