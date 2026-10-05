@@ -23,7 +23,6 @@ def run_web():
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه روشن$'))
 async def pio_all_on(event):
     g_id = event.chat_id
-    # فقط همون کلمات رو از طرف شما میفرسته
     await core.client.send_message(g_id, "پیو روشن")
     await asyncio.sleep(3)
     await core.client.send_message(g_id, "بانداژ روشن")
@@ -36,7 +35,6 @@ async def pio_all_on(event):
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^پیو همه خاموش$'))
 async def pio_all_off(event):
     g_id = event.chat_id
-    # فقط همون کلمات رو از طرف شما میفرسته
     await core.client.send_message(g_id, "پیو خاموش")
     await asyncio.sleep(3)
     await core.client.send_message(g_id, "بانداژ خاموش")
@@ -48,19 +46,59 @@ async def pio_all_off(event):
 # === دستور روشن کردن همه قابلیت‌ها ===
 @core.client.on(events.NewMessage(outgoing=True, pattern=r'^روشن همه$'))
 async def turn_on_all(event):
+    # ابزارهای کاربردی
     core.anti_delete_active = True
     core.keyword_alert_active = True
-    core.stray_cat_active = True
-    core.collect_points_active = True
-    core.fishing_active = True
     core.ghost_mode_active = True
-    smart_shoot.smart_active = True
     
+    # واکنش خودکار
     if hasattr(reactions, 'react_active'):
         reactions.react_active = True
 
-    shooting.piou_active = True
-    await event.reply("✅ تمام قابلیت‌های ربات **روشن** شدند!")
+    # قابلیت‌های بازی پیو (اگه گروه هدف ثبت شده باشه)
+    if core.pio_active_group:
+        shooting.piou_active = True
+        smart_shoot.smart_active = True
+        smart_shoot.refill_active = True # بانداژ
+        
+        # روشن کردن رینگ
+        if not core.ring_active_status:
+            core.ring_active_status = True
+            asyncio.create_task(ring.ring_loop(core.pio_active_group))
+            
+        # روشن کردن اسکواد
+        if not squad.squad_active:
+            squad.squad_active = True
+            asyncio.create_task(squad.squad_loop())
+            
+        await event.reply("✅ تمام قابلیت‌های ربات (ابزارها + پیو + هوشمند + بانداژ + رینگ + اسکواد) **روشن** شدند!\n\n⚠️ *نکته: سیستم دشمن و دانجن برای امنیت باید دستی روشن بشن.*")
+    else:
+        await event.reply("✅ ابزارها روشن شدند!\n⚠️ اما قابلیت‌های بازی پیو روشن نشدن چون اول باید `اد لینک` بزنید.")
+
+# === دستور خاموش کردن همه قابلیت‌ها ===
+@core.client.on(events.NewMessage(outgoing=True, pattern=r'^خاموش همه$'))
+async def turn_off_all(event):
+    # خاموش کردن ابزارها
+    core.anti_delete_active = False
+    core.keyword_alert_active = False
+    core.ghost_mode_active = False
+    if hasattr(reactions, 'react_active'):
+        reactions.react_active = False
+
+    # خاموش کردن بازی‌ها
+    core.factory_active = False
+    shooting.piou_active = False
+    smart_shoot.smart_active = False
+    smart_shoot.refill_active = False
+    core.ring_active_status = False
+    squad.squad_active = False
+    art.art_active = False
+    
+    # خاموش کردن سیستم خطرناک (دشمن و دانجن)
+    core.enemy_active = False
+    core.dungeon_active = False
+    
+    await event.reply("🛑 تمام قابلیت‌های ربات (ابزارها، بازی‌ها، رینگ، اسکواد، دشمن و دانجن) **خاموش** شدند!")
 
 async def main():
     await core.client.start()
@@ -74,16 +112,18 @@ async def main():
         
     print("✅ سلف‌بات Amir روشن شد!")
     
+    # استارت حلقه‌های پس‌زمینه
+    asyncio.ensure_future(name_clock.start_name_clock())
     asyncio.ensure_future(misc.schedule_loop())
     asyncio.ensure_future(shooting.meat_loop())
     asyncio.ensure_future(shooting.blind_shot_loop())
     asyncio.ensure_future(shooting.piou_main_loop())
-    asyncio.ensure_future(multi_react.start_multi_clients())  # <--- این خط سنیورها رو وصل میکنه
+    asyncio.ensure_future(multi_react.start_multi_clients())
     asyncio.ensure_future(squad.squad_loop())
     asyncio.ensure_future(art.art_loop())
     asyncio.ensure_future(video_downloader.start_download_worker())
     asyncio.ensure_future(ring.start_ring_if_active())
-    asyncio.ensure_future(name_clock.start_name_clock())
+
     await core.client.run_until_disconnected()
 
 def keep_alive():
