@@ -35,10 +35,10 @@ auto_react_targets = {}
 multi_active_reactions = {}
 downloader_whitelist = set()
 ring_active_status = False
-enemy_active = False  # <--- متغیر جدید برای وضعیت دشمن
-enemy_targets = {} 
-# <--- متغیر جدید برای لیست دشمنان
-dungeon_active = False
+enemy_active = False
+enemy_targets = {}
+enemy_active_chat = None  # <--- اضافه شد
+dungeon_active = False     # <--- اضافه شد
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
@@ -75,7 +75,7 @@ def strip_clock(name):
 
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist, ring_active_status, enemy_active, enemy_targets
+    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist, ring_active_status, enemy_active, enemy_targets, enemy_active_chat, dungeon_active
     
     async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
@@ -93,6 +93,8 @@ async def load_db():
                     ring_active_status = data.get("ring_active", False)
                     enemy_active = data.get("enemy_active", False)
                     enemy_targets = data.get("enemy_targets", {})
+                    enemy_active_chat = data.get("enemy_active_chat", None) # <--- اضافه شد
+                    dungeon_active = data.get("dungeon_active", False)      # <--- اضافه شد
                     print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
@@ -122,7 +124,9 @@ async def save_db():
         "downloader_whitelist": list(downloader_whitelist),
         "ring_active": ring_active_status,
         "enemy_active": enemy_active,
-        "enemy_targets": enemy_targets
+        "enemy_targets": enemy_targets,
+        "enemy_active_chat": enemy_active_chat, # <--- اضافه شد
+        "dungeon_active": dungeon_active        # <--- اضافه شد
     }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_TAG} {json_str}"
