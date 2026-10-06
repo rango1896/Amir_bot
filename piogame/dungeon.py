@@ -45,41 +45,41 @@ async def dungeon_loop():
             
         try:
             await log("🌀 شروع چرخه جدید... در حال ارسال 'پیو دانجن'")
-            await client.send_message(dungeon_chat_id, "پیو دانجن")
-            await asyncio.sleep(10) # صبر ۱۰ ثانیه ای برای کندی ربات پیو
+            my_msg = await client.send_message(dungeon_chat_id, "پیو دانجن")
+            await asyncio.sleep(10) # صبر ۱۰ ثانیه‌ای برای کندی ربات پیو
             
-            # گرفتن ۵۰۰ پیام اخیر گروه
-            msgs = await client.get_messages(dungeon_chat_id, limit=500)
+            # فقط پیام‌هایی که بعد از دستور ما فرستاده شدن رو می‌خونیم
+            msgs = await client.get_messages(dungeon_chat_id, min_id=my_msg.id, limit=10)
+            
             if not msgs:
-                await log("⚠️ هیچ پیامی تو گروه پیدا نشد!")
+                await log("⚠️ ربات پیو هیچ جوابی نداد!")
                 await asyncio.sleep(15)
                 continue
             
-            # ۱. جستجو در بین ۵۰۰ پیام اخیر برای پیدا کردن پیام استراحت یا ران فعال
+            # ۱. جستجو برای پیام استراحت یا ران فعال
             found_cooldown = False
             for m in msgs:
-                if m.text and ("صبر کن" in m.text or "وارد دانجن شد" in m.text or "نتیجه" in m.text or "ران فعال" in m.text or "تموم می‌شه" in m.text):
-                    wait_time = parse_time(m.text)
-                    if wait_time > 0:
-                        await log(f"⏳ پیام استراحت/ران فعال پیدا شد:\nربات {wait_time} ثانیه میخوابه.")
-                        found_cooldown = True
-                        await asyncio.sleep(wait_time + 10)
-                        break # از حلقه پیام‌ها خارج میشه
+                if m.text and not m.out: # not m.out یعنی پیام خودمون نباشه
+                    if "صبر کن" in m.text or "وارد دانجن شد" in m.text or "نتیجه" in m.text or "ران فعال" in m.text or "تموم می‌شه" in m.text:
+                        wait_time = parse_time(m.text)
+                        if wait_time > 0:
+                            await log(f"⏳ پیام استراحت/ران فعال پیدا شد:\nربات {wait_time} ثانیه میخوابه.")
+                            found_cooldown = True
+                            await asyncio.sleep(wait_time + 10)
+                            break
             
-            # اگه پیام صبر کردن رو پیدا کرده بود، میره شروع چرخه بعدی
             if found_cooldown:
                 continue
                 
-            # ۲. اگه پیام صبر کردن نبود، پس باید دکمه‌ها رو بزنیم
-            # پیدا کردن پیام دکمه‌دار ربات بازی
+            # ۲. پیدا کردن پیام دکمه‌دار اول
             panel_msg = None
             for m in msgs:
-                if m.buttons and not m.out: # دکمه داشته باشه و از طرف خودمون نباشه
+                if m.buttons and not m.out:
                     panel_msg = m
                     break
                     
             if not panel_msg:
-                await log("⚠️ تو ۵۰۰ پیام اخیر هیچ پیام دکمه‌داری پیدا نشد!")
+                await log("⚠️ دکمه اول پیدا نشد!")
                 await asyncio.sleep(30)
                 continue
                 
@@ -87,13 +87,13 @@ async def dungeon_loop():
             try:
                 await panel_msg.click(0, 0)
             except: pass
-            await asyncio.sleep(10) # صبر ۱۰ ثانیه ای
+            await asyncio.sleep(10)
             
-            # پیدا کردن دکمه "انتخاب پارتی"
+            # پیدا کردن دکمه "انتخاب پارتی" (فقط پیام‌های بعد از کلیک اول)
+            msgs = await client.get_messages(dungeon_chat_id, min_id=panel_msg.id, limit=10)
             panel_msg = None
-            msgs = await client.get_messages(dungeon_chat_id, limit=500)
             for m in msgs:
-                if m.buttons and any("انتخاب پارتی" in btn.text for row in m.buttons for btn in row if btn):
+                if m.buttons and not m.out and any("انتخاب پارتی" in btn.text for row in m.buttons for btn in row if btn):
                     panel_msg = m
                     break
                     
@@ -104,15 +104,14 @@ async def dungeon_loop():
                         if "انتخاب پارتی" in btn.text:
                             await panel_msg.click(text=btn.text)
                             break
-                await asyncio.sleep(10) # صبر ۱۰ ثانیه ای
+                await asyncio.sleep(10)
             else:
                 await log("⚠️ دکمه 'انتخاب پارتی' پیدا نشد!")
                 
             # پیدا کردن دکمه‌های فن‌آرت
             art_msg = None
-            msgs = await client.get_messages(dungeon_chat_id, limit=500)
             for m in msgs:
-                if m.buttons:
+                if m.buttons and not m.out:
                     all_btns = [btn for row in m.buttons for btn in row if btn]
                     if len(all_btns) >= 2:
                         art_msg = m
@@ -131,15 +130,19 @@ async def dungeon_loop():
                     await art_msg.click(text=btn.text)
                     await asyncio.sleep(2)
                 await log(f"✅ انتخاب فن‌آرت‌ها:\n{', '.join(selected_names)}")
-                await asyncio.sleep(10) # صبر ۱۰ ثانیه ای
+                await asyncio.sleep(10)
             else:
                 await log("⚠️ پیام فن‌آرت‌ها پیدا نشد!")
                 
             # پیدا کردن دکمه شروع
             start_msg = None
-            msgs = await client.get_messages(dungeon_chat_id, limit=500)
+            # اگه تو پیام‌های قبلی پیدا نکرد، دوباره پیام‌های بعد از فن‌آرت رو می‌خونه
+            if not any(m.buttons and not m.out and any("شروع" in btn.text for row in m.buttons for btn in row if btn) for m in msgs):
+                last_id = art_msg.id if art_msg else my_msg.id
+                msgs = await client.get_messages(dungeon_chat_id, min_id=last_id, limit=10)
+                
             for m in msgs:
-                if m.buttons and any("شروع" in btn.text for row in m.buttons for btn in row if btn):
+                if m.buttons and not m.out and any("شروع" in btn.text for row in m.buttons for btn in row if btn):
                     start_msg = m
                     break
                     
@@ -150,22 +153,24 @@ async def dungeon_loop():
                             await log(f"🖱️ کلیک روی دکمه: {btn.text}")
                             await start_msg.click(text=btn.text)
                             break
-                await asyncio.sleep(10) # صبر ۱۰ ثانیه ای
+                await asyncio.sleep(10)
             else:
                 await log("⚠️ دکمه 'شروع' پیدا نشد!")
                 
             # خواندن زمان استراحت نهایی
-            msgs = await client.get_messages(dungeon_chat_id, limit=500)
+            last_id = start_msg.id if start_msg else my_msg.id
+            msgs = await client.get_messages(dungeon_chat_id, min_id=last_id, limit=10)
             final_found = False
             for m in msgs:
-                if m.text and ("صبر کن" in m.text or "وارد دانجن شد" in m.text or "نتیجه" in m.text or "ران فعال" in m.text or "تموم می‌شه" in m.text):
-                    wait_time = parse_time(m.text)
-                    if wait_time > 0:
-                        await log(f"⏳ دانجن شروع شد!\nربات {wait_time} ثانیه استراحت می‌کنه...")
-                        final_found = True
-                        await asyncio.sleep(wait_time + 10)
-                        break
-                        
+                if m.text and not m.out:
+                    if "صبر کن" in m.text or "وارد دانجن شد" in m.text or "نتیجه" in m.text or "ران فعال" in m.text or "تموم می‌شه" in m.text:
+                        wait_time = parse_time(m.text)
+                        if wait_time > 0:
+                            await log(f"⏳ دانجن شروع شد!\nربات {wait_time} ثانیه استراحت می‌کنه...")
+                            final_found = True
+                            await asyncio.sleep(wait_time + 10)
+                            break
+                            
             if not final_found:
                 await log("⚠️ زمانی تو پیام نهایی پیدا نشد! ۶۰ ثانیه استراحت...")
                 await asyncio.sleep(60)
