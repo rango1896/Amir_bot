@@ -38,6 +38,14 @@ def parse_time_from_text(text):
     if match_sec: seconds += int(match_sec.group(1))
     return seconds
 
+# === تابع پیدا کردن نفر زنده بعدی ===
+async def find_next_alive_target():
+    for i in range(len(core.pio_target_links)):
+        idx = (core.pio_active_link_index + 1 + i) % len(core.pio_target_links)
+        if time.time() >= dead_targets_timers.get(idx, 0):
+            return idx
+    return None # همه مرده‌ن
+
 # --- دستورات تنظیمات ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^تنظیم تیر\s+(\d+)$'))
 async def set_ammo_limit(event):
@@ -54,7 +62,6 @@ async def set_shoot_interval(event):
 # --- دستورات لیست و گروه (پشتیبانی از چند لینک) ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد لینک\s+(.+)$'))
 async def add_link(event):
-    # اطمینان از اینکه متغیر در core حتما لیست باشه
     if not isinstance(core.pio_target_links, list):
         core.pio_target_links = []
         
@@ -137,13 +144,14 @@ async def game_listener(event):
         is_dead = True
         revive_time = parse_time_from_text(text)
         
-    if is_dead and smart_active and not is_in_death_state:
-        # ثبت زمان زنده شدن فرد مرده
+    if is_dead and smart_active:
+        # همیشه زمان مرگ رو ثبت می‌کنه، حتی وسط حالت مرگ
         dead_targets_timers[core.pio_active_link_index] = time.time() + revive_time
-        await log_debug(f"⚠️ نفر شماره {core.pio_active_link_index} مرده شد!\nزمان زنده شدن: {revive_time} ثانیه.\nشروع پروسه حالت مرگ...")
-        # روشن کردن موتور حالت مرگ
-        if current_task is None or current_task.done():
-            current_task = asyncio.create_task(death_cycle_task())
+        await log_debug(f"⚠️ نفر شماره {core.pio_active_link_index} مرده شد!\nزمان زنده شدن: {revive_time} ثانیه.")
+        # اگه تو حالت مرگ نیست، موتور مرگ رو روشن کن
+        if not is_in_death_state:
+            if current_task is None or current_task.done():
+                current_task = asyncio.create_task(death_cycle_task())
 
 # --- موتور اصلی حالت مرگ ---
 async def death_cycle_task():
@@ -163,25 +171,13 @@ async def death_cycle_task():
             
         await log_debug(f"📊 تعداد بانداژهای شما: {bandages} تا پیدا شد.")
         
-        if bandages == 0:
-            await log_debug("❗ بانداژ صفر بود. مستقیم میره سراغ نفر بعدی.")
-
         # ۲. شلیک با بانداژها به نفر بعدی
         shots_done = 0
         while shots_done < bandages:
-            # پیدا کردن نفر بعدی که زنده‌ست
-            found_next = False
-            for i in range(len(core.pio_target_links)):
-                idx = (core.pio_active_link_index + 1 + i) % len(core.pio_target_links)
-                # اگه زمان مرگش گذشته بود یا اصلاً مرده نبود
-                if time.time() >= dead_targets_timers.get(idx, 0):
-                    core.pio_active_link_index = idx
-                    await core.save_pio_db()
-                    found_next = True
-                    break
+            next_idx = await find_next_alive_target()
             
             # اگه همه مرده‌ن! (پیدا کردن کمترین زمان)
-            if not found_next:
+            if next_idx is None:
                 valid_timers = {k: v for k, v in dead_targets_timers.items() if v > time.time()}
                 if valid_timers:
                     min_time = min(valid_timers.values())
@@ -195,6 +191,9 @@ async def death_cycle_task():
                     if target_idx in dead_targets_timers: del dead_targets_timers[target_idx]
                 else:
                     await asyncio.sleep(5)
+            else:
+                core.pio_active_link_index = next_idx
+                await core.save_pio_db()
 
             # شلیک به نفر پیدا شده
             target = core.pio_target_links[core.pio_active_link_index]
@@ -215,11 +214,28 @@ async def death_cycle_task():
                 core.next_shoot_time = time.time() + shoot_interval
                 
             await log_debug(f"🔫 شلیک {shots_done} از {bandages} به نفر شماره {core.pio_active_link_index} انجام شد.")
-            # اگر وسط شلیک اون نفر هم مرد، حلقه از اول پیدا می‌کنه نفر بعدی رو
             
-        # ۳. صبر ۴ دقیقه برای شارژ بانداژ
-        await log_debug("⏳ پروسه بانداژ تموم شد. ۴ دقیقه (۲۴۰ ثانیه) استراحت برای شارژ بانداژ...")
-        await asyncio.sleep(240)
+        # ۳. بررسی نهایی قبل از استراحت ۴ دقیقه
+        next_idx = await find_next_alive_target()
+        if next_idx is None:
+            # اگه بعد از تموم شدن بانداژها همه هنوز مرده‌ن، معطل شارژ شدن نمیشیم و میریم سراغ زمان زنده شدن
+            valid_timers = {k: v for k, v in dead_targets_timers.items() if v > time.time()}
+            if valid_timers:
+                min_time = min(valid_timers.values())
+                wait_time = min_time - time.time()
+                target_idx = [k for k, v in valid_timers.items() if v == min_time][0]
+                if wait_time > 0:
+                    await log_debug(f"⏳ بانداژها تموم شد و همه مرده‌ن! ربات {wait_time} ثانیه استراحت می‌کنه.")
+                    await asyncio.sleep(wait_time)
+                core.pio_active_link_index = target_idx
+                await core.save_pio_db()
+                if target_idx in dead_targets_timers: del dead_targets_timers[target_idx]
+            else:
+                await log_debug("⏳ ۴ دقیقه استراحت برای شارژ بانداژ...")
+                await asyncio.sleep(240)
+        else:
+            await log_debug("⏳ ۴ دقیقه استراحت برای شارژ بانداژ...")
+            await asyncio.sleep(240)
         
     except asyncio.CancelledError:
         pass
@@ -255,6 +271,21 @@ async def piou_main_loop():
         if piou_active and piou_shoot_active and core.pio_active_group and not is_in_death_state and core.pio_target_links:
             try:
                 while piou_active and piou_shoot_active and core.pio_active_group and not is_in_death_state and core.pio_target_links:
+                    # بررسی زنده بودن نفر فعلی قبل از شلیک
+                    if time.time() < dead_targets_timers.get(core.pio_active_link_index, 0):
+                        next_idx = await find_next_alive_target()
+                        if next_idx is not None:
+                            core.pio_active_link_index = next_idx
+                            await core.save_pio_db()
+                            continue
+                        else:
+                            # اگه همه مرده‌ن موتور مرگ رو روشن کن
+                            if not is_in_death_state:
+                                if current_task is None or current_task.done():
+                                    current_task = asyncio.create_task(death_cycle_task())
+                            await asyncio.sleep(2)
+                            continue
+                            
                     g_id = core.pio_active_group
                     target = core.pio_target_links[core.pio_active_link_index]
                     m_id = target["m_id"]
