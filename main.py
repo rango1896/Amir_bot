@@ -5,8 +5,8 @@ import threading
 from telethon import events
 import urllib.request
 
-# === لود کردن ماژول‌ها از پوشه piogame ===
-from piogame import shooting, smart_shoot, cooldown, art, squad, ring, enemy, dungeon
+# === لود کردن ماژول‌ها از پوشه piogame (smart_shoot حذف شد) ===
+from piogame import shooting, cooldown, art, squad, ring, enemy, dungeon
 
 # === لود کردن ماژول‌ها از پوشه tools ===
 from tools import anti_delete, alerts, user_info, spam, reactions, misc, multi_react, stealer, video_downloader, animation, name_clock
@@ -58,8 +58,8 @@ async def turn_on_all(event):
     # قابلیت‌های بازی پیو (اگه گروه هدف ثبت شده باشه)
     if core.pio_active_group:
         shooting.piou_active = True
-        smart_shoot.smart_active = True
-        smart_shoot.refill_active = True # بانداژ
+        shooting.smart_active = True
+        shooting.refill_active = True # بانداژ
         
         # روشن کردن رینگ
         if not core.ring_active_status:
@@ -88,8 +88,8 @@ async def turn_off_all(event):
     # خاموش کردن بازی‌ها
     core.factory_active = False
     shooting.piou_active = False
-    smart_shoot.smart_active = False
-    smart_shoot.refill_active = False
+    shooting.smart_active = False
+    shooting.refill_active = False
     core.ring_active_status = False
     squad.squad_active = False
     art.art_active = False
