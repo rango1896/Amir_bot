@@ -19,7 +19,7 @@ smart_active = False
 refill_active = True
 is_in_death_state = False
 current_task = None
-dead_targets_timers = {} # دفترچه زمان زنده شدن مردها
+dead_targets_timers = {} # دفترچه زمان زنده شدن مرده‌ها
 
 # === تابع دیباگ برای ارسال لاگ به پیام‌های ذخیره شده ===
 async def log_debug(text):
@@ -97,13 +97,55 @@ async def add_link(event):
         await core.save_pio_db()
         await event.reply(f"✅ {added_count} لینک ثبت شد.")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد لینک$'))
-async def remove_link(event):
+# --- دستورات حذف لینک ---
+@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف لینک پیام\s+(.+)$'))
+async def remove_single_link(event):
+    link = event.pattern_match.group(1).strip()
+    try:
+        target_dict = None
+        if "t.me/c/" in link:
+            parts = link.split("t.me/c/")[-1].split("/")
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                g_id = int("-100" + parts[0]); m_id = int(parts[1])
+                target_dict = {"g_id": g_id, "m_id": m_id}
+        else:
+            parts = link.split("t.me/")[-1].split("/")
+            if len(parts) == 2:
+                ent = await client.get_entity(parts[0])
+                g_id = utils.get_peer_id(ent); m_id = int(parts[1])
+                target_dict = {"g_id": g_id, "m_id": m_id}
+
+        if not target_dict:
+            return await event.reply("❗ فرمت لینک اشتباه است.")
+
+        if target_dict in core.pio_target_links:
+            idx_removed = core.pio_target_links.index(target_dict)
+            core.pio_target_links.remove(target_dict)
+            
+            if not core.pio_target_links:
+                core.pio_active_link_index = 0
+                core.pio_active_group = None
+            elif idx_removed < core.pio_active_link_index:
+                core.pio_active_link_index -= 1
+            elif idx_removed == core.pio_active_link_index:
+                core.pio_active_link_index = core.pio_active_link_index % len(core.pio_target_links)
+                
+            await core.save_pio_db()
+            await event.reply("✅ لینک مورد نظر با موفقیت حذف شد.")
+        else:
+            await event.reply("❗ این لینک تو لیست وجود نداره.")
+    except Exception as e:
+        await event.reply(f"❗ خطا در حذف لینک:\n`{e}`")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r'^حذف لینک همه$'))
+async def remove_all_links(event):
     core.pio_target_links.clear()
+    core.pio_active_link_index = 0
     core.pio_active_group = None
     await core.save_pio_db()
     await event.reply("✅ تمام لینک‌ها پاک شدند.")
 
+# --- دستورات گروه ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد گروه\s+(.+)$'))
 async def add_group(event):
     g_str = event.pattern_match.group(1)
@@ -314,17 +356,29 @@ async def piou_main_loop():
 # --- دستورات روشن و خاموش ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو روشن$'))
 async def piou_on(event):
-    global piou_active, last_meat_time
+    global piou_active, last_meat_time, smart_active, refill_active
     if not piou_active:
         if not core.pio_target_links:
             return await event.reply("❗ اول `اد لینک` بزن!")
-        piou_active = True; last_meat_time = 0
-        await event.reply("🔫 سیستم پیو **روشن** شد.")
+        piou_active = True
+        last_meat_time = 0
+        smart_active = True
+        refill_active = True
+        help_text = (
+            "🔫 سیستم پیو، هوشمند و بانداژ **روشن** شد!\n\n"
+            "💡 **یادآوری حذف لینک‌ها:**\n"
+            "• برای حذف یه لینک خاص:\n`حذف لینک پیام [لینک]`\n"
+            "• برای پاک کردن کل لینک‌ها:\n`حذف لینک همه`"
+        )
+        await event.reply(help_text)
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^پیو خاموش$'))
 async def piou_off(event):
-    global piou_active; piou_active = False
-    await event.reply("🛑 سیستم پیو **خاموش** شد.")
+    global piou_active, smart_active, refill_active
+    piou_active = False
+    smart_active = False
+    refill_active = False
+    await event.reply("🛑 سیستم پیو، هوشمند و بانداژ **خاموش** شد.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^هوشمند روشن$'))
 async def smart_on(event):
