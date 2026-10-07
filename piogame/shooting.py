@@ -54,6 +54,10 @@ async def set_shoot_interval(event):
 # --- دستورات لیست و گروه (پشتیبانی از چند لینک) ---
 @client.on(events.NewMessage(outgoing=True, pattern=r'^اد لینک\s+(.+)$'))
 async def add_link(event):
+    # اطمینان از اینکه متغیر در core حتما لیست باشه
+    if not isinstance(core.pio_target_links, list):
+        core.pio_target_links = []
+        
     links_str = event.pattern_match.group(1)
     links_list = links_str.split()
     added_count = 0
@@ -66,6 +70,8 @@ async def add_link(event):
                     if not core.pio_active_group: core.pio_active_group = g_id
                     core.pio_target_links.append({"g_id": g_id, "m_id": m_id})
                     added_count += 1
+                else:
+                    await event.reply(f"❗ فرمت این لینک اشتباه است: {link}")
             else:
                 parts = link.split("t.me/")[-1].split("/")
                 if len(parts) == 2:
@@ -74,12 +80,15 @@ async def add_link(event):
                     if not core.pio_active_group: core.pio_active_group = g_id
                     core.pio_target_links.append({"g_id": g_id, "m_id": m_id})
                     added_count += 1
-        except: pass
+                else:
+                    await event.reply(f"❗ فرمت این لینک اشتباه است: {link}")
+        except Exception as e:
+            await event.reply(f"❗ خطا در ثبت لینک {link}:\n`{e}`")
+            
     if added_count > 0:
         core.pio_active_link_index = 0
         await core.save_pio_db()
         await event.reply(f"✅ {added_count} لینک ثبت شد.")
-    else: await event.reply("❗ فرمت لینک‌ها اشتباه است.")
 
 @client.on(events.NewMessage(outgoing=True, pattern=r'^حذف اد لینک$'))
 async def remove_link(event):
