@@ -21,6 +21,14 @@ is_in_death_state = False
 current_task = None
 dead_targets_timers = {} # دفترچه زمان زنده شدن مردها
 
+# === تابع دیباگ برای ارسال لاگ به پیام‌های ذخیره شده ===
+async def log_debug(text):
+    try:
+        print(f"🐞 DEBUG: {text}")
+        await client.send_message('me', f"🐞 **[دیباگ پیو]**:\n\n{text}")
+    except:
+        pass
+
 def parse_time_from_text(text):
     text = core.fa_to_en_digits(text)
     seconds = 0
@@ -123,6 +131,7 @@ async def game_listener(event):
     if is_dead and smart_active and not is_in_death_state:
         # ثبت زمان زنده شدن فرد مرده
         dead_targets_timers[core.pio_active_link_index] = time.time() + revive_time
+        await log_debug(f"⚠️ نفر شماره {core.pio_active_link_index} مرده شد!\nزمان زنده شدن: {revive_time} ثانیه.\nشروع پروسه حالت مرگ...")
         # روشن کردن موتور حالت مرگ
         if current_task is None or current_task.done():
             current_task = asyncio.create_task(death_cycle_task())
@@ -143,6 +152,11 @@ async def death_cycle_task():
             b_match = re.search(r'کمک اولیه.*?(\d+)\s*/\s*\d+', msgs[0].text)
             if b_match: bandages = int(b_match.group(1))
             
+        await log_debug(f"📊 تعداد بانداژهای شما: {bandages} تا پیدا شد.")
+        
+        if bandages == 0:
+            await log_debug("❗ بانداژ صفر بود. مستقیم میره سراغ نفر بعدی.")
+
         # ۲. شلیک با بانداژها به نفر بعدی
         shots_done = 0
         while shots_done < bandages:
@@ -165,7 +179,7 @@ async def death_cycle_task():
                     wait_time = min_time - time.time()
                     target_idx = [k for k, v in valid_timers.items() if v == min_time][0]
                     if wait_time > 0:
-                        await client.send_message(core.pio_active_group, "⏳ همه مرده‌ن! ربات منتظر زنده شدن نزدیک‌ترین نفر می‌مونه...")
+                        await log_debug(f"⏳ همه مرده‌ن! ربات {wait_time} ثانیه استراحت می‌کنه تا نفر شماره {target_idx} زاده بشه.")
                         await asyncio.sleep(wait_time)
                     core.pio_active_link_index = target_idx
                     await core.save_pio_db()
@@ -191,19 +205,21 @@ async def death_cycle_task():
             if time.time() >= core.next_shoot_time:
                 core.next_shoot_time = time.time() + shoot_interval
                 
+            await log_debug(f"🔫 شلیک {shots_done} از {bandages} به نفر شماره {core.pio_active_link_index} انجام شد.")
             # اگر وسط شلیک اون نفر هم مرد، حلقه از اول پیدا می‌کنه نفر بعدی رو
             
         # ۳. صبر ۴ دقیقه برای شارژ بانداژ
-        await client.send_message(core.pio_active_group, "⏳ ۴ دقیقه صبر برای شارژ بانداژ...")
+        await log_debug("⏳ پروسه بانداژ تموم شد. ۴ دقیقه (۲۴۰ ثانیه) استراحت برای شارژ بانداژ...")
         await asyncio.sleep(240)
         
     except asyncio.CancelledError:
         pass
     except Exception as e:
-        print(f"❌ خطا در چرخه مرگ: {e}")
+        await log_debug(f"❌ خطا در چرخه مرگ:\n`{e}`")
     finally:
         is_in_death_state = False
         piou_shoot_active = True
+        await log_debug("✅ حالت مرگ پایان یافت. شلیک عادی از سر گرفته شد.")
 
 # --- لوپ‌های پس‌زمینه ---
 async def meat_loop():
