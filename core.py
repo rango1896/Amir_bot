@@ -37,14 +37,16 @@ downloader_whitelist = set()
 ring_active_status = False
 enemy_active = False
 enemy_targets = {}
-enemy_active_chat = None  # <--- اضافه شد
-dungeon_active = False     # <--- اضافه شد
+enemy_active_chat = None
+dungeon_active = False
 NOTES_PASSWORD = "amir1370"
 TEHRAN_TZ = ZoneInfo("Asia/Tehran")
 
+# === تغییرات دیتابیس پیو ===
 DB_PIOU_TAG = "#DB_PIOU"
 pio_active_group = None
-pio_target_links = {}
+pio_target_links = []        # تغییر از دیکشنری به لیست (دفترچه)
+pio_active_link_index = 0    # اضافه شد: شماره لینک فعلی (ناصر=0، علی=1، اصغر=2)
 next_shoot_time = 0
 
 def fa_to_en_digits(text):
@@ -75,7 +77,7 @@ def strip_clock(name):
 
 async def load_db():
     global anti_delete_targets, tag_targets, notes_list, keywords_list, auto_react_targets
-    global pio_active_group, pio_target_links, multi_active_reactions, downloader_whitelist, ring_active_status, enemy_active, enemy_targets, enemy_active_chat, dungeon_active
+    global pio_active_group, pio_target_links, pio_active_link_index, multi_active_reactions, downloader_whitelist, ring_active_status, enemy_active, enemy_targets, enemy_active_chat, dungeon_active
     
     async for msg in client.iter_messages(DB_CHAT, limit=50):
         if msg.text and msg.text.startswith(DB_TAG):
@@ -93,8 +95,8 @@ async def load_db():
                     ring_active_status = data.get("ring_active", False)
                     enemy_active = data.get("enemy_active", False)
                     enemy_targets = data.get("enemy_targets", {})
-                    enemy_active_chat = data.get("enemy_active_chat", None) # <--- اضافه شد
-                    dungeon_active = data.get("dungeon_active", False)      # <--- اضافه شد
+                    enemy_active_chat = data.get("enemy_active_chat", None)
+                    dungeon_active = data.get("dungeon_active", False)
                     print("✅ دیتابیس ربات از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس: {e}")
@@ -107,7 +109,8 @@ async def load_db():
                 if json_str:
                     data = json.loads(json_str)
                     pio_active_group = data.get("active_group", None)
-                    pio_target_links = {int(k): v for k, v in data.get("links", {}).items()}
+                    pio_target_links = data.get("links", [])  # خواندن لیست لینک‌ها
+                    pio_active_link_index = data.get("active_link_index", 0)  # خواندن شماره لینک فعلی
                     print("✅ تنظیمات پیو از گروه بارگذاری شد.")
             except Exception as e:
                 print(f"❌ خطا در خواندن دیتابیس پیو: {e}")
@@ -125,8 +128,8 @@ async def save_db():
         "ring_active": ring_active_status,
         "enemy_active": enemy_active,
         "enemy_targets": enemy_targets,
-        "enemy_active_chat": enemy_active_chat, # <--- اضافه شد
-        "dungeon_active": dungeon_active        # <--- اضافه شد
+        "enemy_active_chat": enemy_active_chat,
+        "dungeon_active": dungeon_active
     }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_TAG} {json_str}"
@@ -142,7 +145,11 @@ async def save_db():
     except Exception as e: print(f"❌ خطا در ذخیره دیتابیس: {e}")
 
 async def save_pio_db():
-    data = {"active_group": pio_active_group, "links": {str(k): v for k, v in pio_target_links.items()}}
+    data = {
+        "active_group": pio_active_group,
+        "links": pio_target_links,               # ذخیره لیست لینک‌ها
+        "active_link_index": pio_active_link_index  # ذخیره شماره لینک فعلی
+    }
     json_str = json.dumps(data, ensure_ascii=False)
     text_to_save = f"{DB_PIOU_TAG} {json_str}"
     found_msg = None
